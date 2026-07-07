@@ -1,0 +1,12 @@
+node_modules
+dist
+out
+.turbo
+**/.turbo
+.DS_Store
+*.log
+apps/shell/release/
+apps/shell/build/app/
+apps/shell/build/Karya.iconset/
+apps/shell/build/icon-*.png
+apps/shell/build/icon-source.png

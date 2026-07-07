@@ -1,0 +1,84 @@
+import type { KernelSnapshot } from "../types";
+import { deriveActivity } from "./activity";
+import { deriveApplications } from "./applications";
+import { createSuggestedCommandDocuments } from "./commands";
+import { deriveNotifications } from "./notifications";
+
+export function createEmptySnapshot(): KernelSnapshot {
+  return {
+    user: { id: "user-local", name: "Karya User" },
+    profiles: {
+      all: [],
+      recent: [],
+      favorite: [],
+      archived: [],
+      defaultSpaceIds: [],
+      statisticsById: {},
+      workspaceIdsByProfile: {},
+    },
+    workspaces: {
+      all: [],
+      open: [],
+      recent: [],
+      archived: [],
+      pinned: [],
+      status: {},
+      openCount: 0,
+      archivedCount: 0,
+      pinnedCount: 0,
+      totalCount: 0,
+      resourceCountByWorkspace: {},
+      resourceIdsByWorkspace: {},
+    },
+    resources: {
+      all: [],
+      recent: [],
+      topLevel: [],
+      folders: [],
+      childrenByFolder: {},
+      childCountByFolder: {},
+      indexedCountByFolder: {},
+      folderHealthById: {},
+      activeResources: [],
+      archivedResources: [],
+      deletedResources: [],
+      metadataById: {},
+      activeCount: 0,
+      archivedCount: 0,
+      deletedCount: 0,
+      totalCount: 0,
+    },
+    events: {
+      all: [],
+      activeEvents: [],
+      archivedEvents: [],
+      deletedEvents: [],
+      metadataById: {},
+      activeCount: 0,
+      archivedCount: 0,
+      deletedCount: 0,
+      totalCount: 0,
+    },
+    search: {
+      query: "",
+      results: [],
+      filters: [],
+      recentQueries: [],
+      suggestedCommands: createSuggestedCommandDocuments(),
+      suggestions: [],
+    },
+    applications: deriveApplications([]),
+    continuity: { recentSessions: [], continueWorkingByWorkspace: {}, activityByWorkspace: {}, workspaceInsightsByWorkspace: {}, resumeQueue: [] },
+    activity: deriveActivity([]),
+    notifications: deriveNotifications([]),
+    settings: { all: [], byId: {} },
+    shell: {
+      activeSurface: { type: "home" },
+      breadcrumbs: [{ id: "surface:home", label: "Home" }],
+      sidebarCollapsed: false,
+      inspectorOpen: true,
+      panelVisibility: { sidebar: true, inspector: true },
+      systemStatus: "initializing",
+    },
+  };
+}

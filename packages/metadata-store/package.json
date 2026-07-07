@@ -1,0 +1,29 @@
+{
+  "name": "@karya/metadata-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@karya/application-registry": "workspace:*",
+    "@karya/domain": "workspace:*",
+    "@karya/persistence": "workspace:*",
+    "@karya/query-service": "workspace:*",
+    "@karya/resource-service": "workspace:*",
+    "@karya/types": "workspace:*",
+    "@karya/workspace-service": "workspace:*",
+    "better-sqlite3": "^11.7.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "rebuild:node-native": "node ./scripts/rebuild-better-sqlite3-node.mjs",
+    "test": "pnpm run rebuild:node-native && vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="132" y1="84" x2="892" y2="932" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7FBF7"/>
+      <stop offset="0.48" stop-color="#DDF1EA"/>
+      <stop offset="1" stop-color="#BDE7E4"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="280" y1="234" x2="744" y2="790" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E3A34"/>
+      <stop offset="1" stop-color="#174B43"/>
+    </linearGradient>
+    <filter id="shadow" x="80" y="82" width="864" height="864" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="30" stdDeviation="38" flood-color="#06221F" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect x="112" y="112" width="800" height="800" rx="184" fill="url(#bg)" filter="url(#shadow)"/>
+  <path fill="url(#mark)" d="M355 256c-20 0-36 16-36 36v123l-79-79c-14-14-37-14-51 0s-14 37 0 51l79 79H145c-20 0-36 16-36 36s16 36 36 36h123l-79 79c-14 14-14 37 0 51s37 14 51 0l79-79v123c0 20 16 36 36 36s36-16 36-36V560l103 103c14 14 37 14 51 0l104-104v153c0 20 16 36 36 36s36-16 36-36V588l81 81c14 14 37 14 51 0s14-37 0-51l-81-81h124c20 0 36-16 36-36s-16-36-36-36H762l81-81c14-14 14-37 0-51s-37-14-51 0l-81 81V292c0-20-16-36-36-36s-36 16-36 36v153L535 341c-14-14-37-14-51 0L391 434V292c0-20-16-36-36-36Zm36 281 119-119 126 126-126 126-119-119v-14Z"/>
+</svg>

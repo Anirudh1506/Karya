@@ -1,0 +1,22 @@
+{
+  "name": "@karya/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@karya/domain": "workspace:*",
+    "@karya/import-service": "workspace:*",
+    "@karya/kernel": "workspace:*",
+    "@karya/persistence": "workspace:*",
+    "@karya/platform": "workspace:*",
+    "@karya/state-engine": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  }
+}

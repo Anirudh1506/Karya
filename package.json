@@ -1,0 +1,23 @@
+{
+  "name": "karya",
+  "private": true,
+  "version": "1.0.0-alpha.1",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "ELECTRON_RUN_AS_NODE= turbo dev --filter=@karya/shell",
+    "build": "turbo build",
+    "build:development": "turbo build --filter=@karya/shell",
+    "build:production": "turbo build --filter=@karya/shell",
+    "dist": "turbo dist --filter=@karya/shell",
+    "pack": "turbo pack --filter=@karya/shell",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "@types/node": "^22.10.7",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  }
+}
