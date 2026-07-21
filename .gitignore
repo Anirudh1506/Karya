@@ -14,3 +14,8 @@ apps/shell/build/icon-source.png
 apps/mobile/.expo/
 apps/mobile/ios/
 apps/mobile/android/
+*.p12
+*.p8
+.env
+apps/shell/release/
+node_modules/
