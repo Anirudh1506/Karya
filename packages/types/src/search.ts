@@ -14,15 +14,7 @@ export interface CommandDefinition {
 }
 
 export type SearchEntityType =
-  | "resource"
-  | "event"
-  | "notification"
-  | "activity"
-  | "profile"
-  | "workspace"
-  | "application"
-  | "command"
-  | "setting";
+  "resource" | "event" | "notification" | "activity" | "profile" | "workspace" | "application" | "command" | "setting";
 
 export interface SearchDocument {
   id: EntityId;
@@ -31,9 +23,24 @@ export interface SearchDocument {
   subtitle?: string;
   keywords: string[];
   sourceId: EntityId;
+  profileId?: EntityId;
+  workspaceIds?: EntityId[];
+  createdAt?: string;
+  updatedAt?: string;
+  lastOpenedAt?: string;
+}
+
+export type SearchMatchKind = "exact" | "prefix" | "word-boundary" | "contains";
+
+export interface SearchMatch {
+  field: "title" | "subtitle" | "keyword";
+  kind: SearchMatchKind;
+  start: number;
+  length: number;
 }
 
 export interface SearchResult {
   document: SearchDocument;
   score: number;
+  matches?: SearchMatch[];
 }

@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { ExplainThisButton } from "../screens/progressive-understanding";
 
 type SearchResult = KernelSnapshot["search"]["results"][number];
 type SearchDocument = SearchResult["document"];
@@ -171,6 +172,7 @@ export function UniversalSearchOverlay({
                   <KeyHint label="Preview" text="Tab" />
                   <KeyHint icon={<CornerDownLeft className="h-3 w-3" />} label="Open" />
                 </span>
+                <ExplainThisButton capability="search" />
               </div>
 
               <div className="min-h-0 max-h-[calc(78vh-9rem)] flex-1 overflow-y-auto overscroll-contain p-3 pr-2">
@@ -215,7 +217,9 @@ export function UniversalSearchOverlay({
               </div>
             </div>
 
-            {previewExpanded ? <SearchPreview result={selectedResult} snapshot={snapshot} onExecute={onExecute} /> : null}
+            {previewExpanded ? (
+              <SearchPreview result={selectedResult} snapshot={snapshot} onExecute={onExecute} />
+            ) : null}
           </motion.section>
         </motion.div>
       ) : null}
@@ -257,14 +261,21 @@ function SearchResultRow({
       <span
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-          selected ? "bg-[var(--karya-ring-soft)] text-[var(--karya-accent)] ring-1 ring-[var(--karya-ring)]" : "bg-[var(--karya-control)] text-[var(--karya-accent)]",
+          selected
+            ? "bg-[var(--karya-ring-soft)] text-[var(--karya-accent)] ring-1 ring-[var(--karya-ring)]"
+            : "bg-[var(--karya-control)] text-[var(--karya-accent)]",
         )}
       >
         <ResultIcon type={result.document.type} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{result.document.title}</span>
-        <span className={cn("block truncate text-xs", selected ? "text-[var(--karya-muted)]" : "text-[var(--karya-subtle)]")}>
+        <span
+          className={cn(
+            "block truncate text-xs",
+            selected ? "text-[var(--karya-muted)]" : "text-[var(--karya-subtle)]",
+          )}
+        >
           {label}
         </span>
       </span>
@@ -273,13 +284,21 @@ function SearchResultRow({
           <kbd
             className={cn(
               "rounded-md border px-2 py-1 text-[11px] font-semibold leading-none",
-              selected ? "border-[var(--karya-ring)] bg-[var(--karya-ring-soft)] text-[var(--karya-text)]" : "border-[var(--karya-border)] bg-[var(--karya-control)] text-[var(--karya-muted)]",
+              selected
+                ? "border-[var(--karya-ring)] bg-[var(--karya-ring-soft)] text-[var(--karya-text)]"
+                : "border-[var(--karya-border)] bg-[var(--karya-control)] text-[var(--karya-muted)]",
             )}
           >
             {shortcut}
           </kbd>
         ) : null}
-        <Badge className={selected ? "border-[var(--karya-ring)] bg-[var(--karya-ring-soft)] text-[var(--karya-text)]" : "border-[var(--karya-border)] bg-[var(--karya-control)] text-[var(--karya-muted)]"}>
+        <Badge
+          className={
+            selected
+              ? "border-[var(--karya-ring)] bg-[var(--karya-ring-soft)] text-[var(--karya-text)]"
+              : "border-[var(--karya-border)] bg-[var(--karya-control)] text-[var(--karya-muted)]"
+          }
+        >
           {label}
         </Badge>
       </span>
@@ -344,7 +363,9 @@ function SearchPreview({
       <div className="mt-5 space-y-3">
         {rows.map((row) => (
           <div key={row.label} className="rounded-xl border border-[var(--karya-border)] bg-[var(--karya-control)] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--karya-subtle)]">{row.label}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--karya-subtle)]">
+              {row.label}
+            </p>
             <p className="mt-1 break-words text-sm text-[var(--karya-text)]">{row.value}</p>
           </div>
         ))}
@@ -471,7 +492,16 @@ function buildEmptyStateResults(snapshot?: KernelSnapshot): SearchResult[] {
     score: 60 - index,
   }));
 
-  return [...pinnedCommands, ...recentCommands, ...recentQueryResults, ...recentResources, ...recentWorkspaces, ...recentProfiles, ...recentApplications, ...suggestedCommands];
+  return [
+    ...pinnedCommands,
+    ...recentCommands,
+    ...recentQueryResults,
+    ...recentResources,
+    ...recentWorkspaces,
+    ...recentProfiles,
+    ...recentApplications,
+    ...suggestedCommands,
+  ];
 }
 
 function buildQuickCreateResults(query: string): SearchResult[] {
@@ -520,13 +550,25 @@ function groupResults(
       },
       {
         label: "Commands",
-        items: indexed.filter(({ result }) => result.document.type === "command" && result.document.keywords.some((keyword) => keyword.includes("pinned"))),
+        items: indexed.filter(
+          ({ result }) =>
+            result.document.type === "command" &&
+            result.document.keywords.some((keyword) => keyword.includes("pinned")),
+        ),
       },
       section("Resources", indexed, "resource"),
       section("Workspaces", indexed, "workspace"),
       section("Profiles", indexed, "profile"),
       section("Applications", indexed, "application"),
-      { label: "Suggested Commands", items: indexed.filter(({ result }) => result.document.type === "command" && !result.document.id.startsWith("recent-search:") && !result.document.keywords.some((keyword) => keyword.includes("pinned"))) },
+      {
+        label: "Suggested Commands",
+        items: indexed.filter(
+          ({ result }) =>
+            result.document.type === "command" &&
+            !result.document.id.startsWith("recent-search:") &&
+            !result.document.keywords.some((keyword) => keyword.includes("pinned")),
+        ),
+      },
     ].filter((group) => group.items.length > 0);
   }
 
@@ -571,11 +613,31 @@ function rankSearchResults(results: SearchResult[], snapshot: KernelSnapshot, qu
   const recentResourceIds = new Set(snapshot.resources.recent.map((resource) => resource.id));
   const recentWorkspaceIds = new Set(snapshot.workspaces.recent.map((workspace) => workspace.id));
   const recentApplicationIds = new Set(snapshot.applications.recent.map((application) => application.metadata.id));
-  const preferredApplicationIds = activeWorkspaceId ? new Set(snapshot.applications.preferredByWorkspace[activeWorkspaceId] ?? []) : new Set<string>();
+  const preferredApplicationIds = activeWorkspaceId
+    ? new Set(snapshot.applications.preferredByWorkspace[activeWorkspaceId] ?? [])
+    : new Set<string>();
 
   return [...results].sort((left, right) => {
-    const leftScore = rankedScore(left, snapshot, normalizedQuery, activeWorkspaceId, recentResourceIds, recentWorkspaceIds, recentApplicationIds, preferredApplicationIds);
-    const rightScore = rankedScore(right, snapshot, normalizedQuery, activeWorkspaceId, recentResourceIds, recentWorkspaceIds, recentApplicationIds, preferredApplicationIds);
+    const leftScore = rankedScore(
+      left,
+      snapshot,
+      normalizedQuery,
+      activeWorkspaceId,
+      recentResourceIds,
+      recentWorkspaceIds,
+      recentApplicationIds,
+      preferredApplicationIds,
+    );
+    const rightScore = rankedScore(
+      right,
+      snapshot,
+      normalizedQuery,
+      activeWorkspaceId,
+      recentResourceIds,
+      recentWorkspaceIds,
+      recentApplicationIds,
+      preferredApplicationIds,
+    );
     return rightScore - leftScore;
   });
 }
@@ -598,7 +660,11 @@ function rankedScore(
   if (result.document.type === "resource") {
     const resource = snapshot.resources.all.find((item) => item.id === result.document.sourceId);
     if (resource) {
-      if (activeWorkspaceId && (resource.primaryWorkspaceId === activeWorkspaceId || resource.workspaceRefs.includes(activeWorkspaceId))) score += 35;
+      if (
+        activeWorkspaceId &&
+        (resource.primaryWorkspaceId === activeWorkspaceId || resource.workspaceRefs.includes(activeWorkspaceId))
+      )
+        score += 35;
       if (recentResourceIds.has(resource.id)) score += 30;
       if (resource.tags.includes("pinned")) score += 22;
     }
@@ -637,10 +703,7 @@ function currentSearchWorkspaceId(snapshot: KernelSnapshot): string | undefined 
   return snapshot.workspaces.active?.id;
 }
 
-function getPreviewRows(
-  document: SearchDocument,
-  snapshot: KernelSnapshot,
-): Array<{ label: string; value: string }> {
+function getPreviewRows(document: SearchDocument, snapshot: KernelSnapshot): Array<{ label: string; value: string }> {
   switch (document.type) {
     case "resource": {
       const resource = snapshot.resources.all.find((item) => item.id === document.sourceId);
@@ -657,7 +720,12 @@ function getPreviewRows(
       if (!event) return fallbackRows(document);
       return [
         { label: "Type", value: "Calendar Event" },
-        { label: "When", value: event.metadata.attributes?.calendarStartDate ? String(event.metadata.attributes.calendarStartDate) : "Unscheduled" },
+        {
+          label: "When",
+          value: event.metadata.attributes?.calendarStartDate
+            ? String(event.metadata.attributes.calendarStartDate)
+            : "Unscheduled",
+        },
         { label: "Workspace", value: event.primaryWorkspaceId ?? event.workspaceRefs[0] ?? "No workspace reference" },
         { label: "Modified", value: formatDate(event.metadata.updatedAt) },
       ];
@@ -701,7 +769,7 @@ function getPreviewRows(
       const profile = snapshot.profiles.all.find((item) => item.id === document.sourceId);
       if (!profile) return fallbackRows(document);
       return [
-        { label: "Default Space", value: profile.defaultSpaceId },
+        { label: "Default Space", value: profile.defaultSpaceId ?? "None" },
         { label: "Spaces", value: String(profile.spaceIds.length) },
         { label: "Created", value: formatDate(profile.createdAt) },
       ];
@@ -743,17 +811,30 @@ function getPreviewActions(
       { icon: <CornerDownLeft className="h-3.5 w-3.5" />, label: "Open", result: createActionResult("Open", document) },
       { icon: <Eye className="h-3.5 w-3.5" />, label: "Reveal", result: createActionResult("Reveal", document) },
       { icon: <Pencil className="h-3.5 w-3.5" />, label: "Rename" },
-      { icon: <FileText className="h-3.5 w-3.5" />, label: "Duplicate", result: createCommandAction("Duplicate Resource", `preview-duplicate-resource:${document.sourceId}`) },
+      {
+        icon: <FileText className="h-3.5 w-3.5" />,
+        label: "Duplicate",
+        result: createCommandAction("Duplicate Resource", `preview-duplicate-resource:${document.sourceId}`),
+      },
       {
         icon: <Archive className="h-3.5 w-3.5" />,
         label: "Archive",
-        result: resource?.lifecycleState === "archived"
-          ? undefined
-          : createCommandAction("Archive Resource", `preview-archive-resource:${document.sourceId}`),
+        result:
+          resource?.lifecycleState === "archived"
+            ? undefined
+            : createCommandAction("Archive Resource", `preview-archive-resource:${document.sourceId}`),
       },
-      { icon: <X className="h-3.5 w-3.5" />, label: "Delete", result: createCommandAction("Delete Resource", `preview-delete-resource:${document.sourceId}`) },
+      {
+        icon: <X className="h-3.5 w-3.5" />,
+        label: "Delete",
+        result: createCommandAction("Delete Resource", `preview-delete-resource:${document.sourceId}`),
+      },
       { icon: <MoveRight className="h-3.5 w-3.5" />, label: "Move" },
-      { icon: <Share2 className="h-3.5 w-3.5" />, label: "Relationships", result: createActionResult("Show Relationships", document) },
+      {
+        icon: <Share2 className="h-3.5 w-3.5" />,
+        label: "Relationships",
+        result: createActionResult("Show Relationships", document),
+      },
     ];
   }
 
@@ -833,7 +914,8 @@ function getCommandShortcut(document: SearchDocument): string | undefined {
   if (sourceId.includes("quick-create-note") || sourceId === "create-note" || title === "create note") return "⌘N";
   if (sourceId.includes("quick-create-task") || sourceId === "create-task" || title === "create task") return "⌘T";
   if (sourceId === "create-bookmark" || title.includes("bookmark")) return "⌘B";
-  if (sourceId.includes("quick-create-workspace") || sourceId === "create-workspace" || title.includes("workspace")) return "⇧⌘W";
+  if (sourceId.includes("quick-create-workspace") || sourceId === "create-workspace" || title.includes("workspace"))
+    return "⇧⌘W";
   if (sourceId === "create-profile" || title.includes("profile")) return "⇧⌘P";
   if (sourceId === "open-clipboard" || title.includes("clipboard")) return "⇧⌘V";
   if (sourceId === "open-calendar" || title.includes("calendar")) return "⌘7";
@@ -843,8 +925,6 @@ function getCommandShortcut(document: SearchDocument): string | undefined {
   if (sourceId === "open-notifications" || title.includes("notifications")) return "⌘9";
   if (sourceId === "open-recent-activity" || title.includes("activity")) return "⌘8";
   if (sourceId === "open-settings" || title.includes("settings")) return "⌘,";
-  if (sourceId === "import-file" || title.includes("import file")) return "⌘I";
-  if (sourceId === "import-folder" || title.includes("import folder")) return "⇧⌘I";
   if (sourceId === "archive-resource" || title.includes("archive")) return "⌘⌫";
   if (sourceId === "resume-last-workspace" || title.includes("resume")) return "⌘R";
   return "↵";

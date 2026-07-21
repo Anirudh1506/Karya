@@ -1,7 +1,18 @@
 import type { KernelSnapshot } from "@karya/core";
 import type { ImportDestination } from "@karya/types";
 import { DESKTOP_HOME_DEFAULT_SPACE_ID } from "../types";
-import type { ApplicationSnapshot, BookmarkReadingStatus, CalendarEventCategory, CalendarView, EventSnapshot, ResourceContextAction, ResourceSnapshot, TaskFilter, TaskPriority, TaskStatus } from "../types";
+import type {
+  ApplicationSnapshot,
+  BookmarkReadingStatus,
+  CalendarEventCategory,
+  CalendarView,
+  EventSnapshot,
+  ResourceContextAction,
+  ResourceSnapshot,
+  TaskFilter,
+  TaskPriority,
+  TaskStatus,
+} from "../types";
 
 export function profileNameForWorkspace(snapshot: KernelSnapshot, profileId: string): string {
   return snapshot.profiles.all.find((profile) => profile.id === profileId)?.name ?? profileId;
@@ -16,7 +27,8 @@ export function resourceLocationLabel(
     return `Desktop${workspaceId ? ` / ${workspaceNameForResource(snapshot, workspaceId)}` : ""}`;
   }
 
-  const profileName = snapshot.profiles.all.find((profile) => profile.id === resource.profileId)?.name ?? resource.profileId;
+  const profileName =
+    snapshot.profiles.all.find((profile) => profile.id === resource.profileId)?.name ?? resource.profileId;
   return `${profileName}${workspaceId ? ` / ${workspaceNameForResource(snapshot, workspaceId)}` : ""}`;
 }
 
@@ -41,7 +53,8 @@ export function currentSurfaceName(
   if (activeSurface.type === "folder") {
     return snapshot?.resources.all.find((resource) => resource.id === activeSurface.resourceId)?.metadata.title;
   }
-  const workspace = snapshot?.workspaces.all.find((candidate) => candidate.id === activeSurface.workspaceId) ?? activeWorkspace;
+  const workspace =
+    snapshot?.workspaces.all.find((candidate) => candidate.id === activeSurface.workspaceId) ?? activeWorkspace;
   return workspace ? displayWorkspaceName(workspace) : undefined;
 }
 
@@ -74,41 +87,56 @@ export function currentSurfaceProfileId(
   return workspace?.profileId ?? fallbackProfileId;
 }
 
-export function getDesktopHomeDefaultSpace(snapshot: KernelSnapshot): KernelSnapshot["workspaces"]["all"][number] | undefined {
+export function getDesktopHomeDefaultSpace(
+  snapshot: KernelSnapshot,
+): KernelSnapshot["workspaces"]["all"][number] | undefined {
   return snapshot.workspaces.all.find((workspace) => workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID);
 }
 
-export function getImportWorkspaceOptions(snapshot: KernelSnapshot, profileId: string): KernelSnapshot["workspaces"]["all"] {
+export function getImportWorkspaceOptions(
+  snapshot: KernelSnapshot,
+  profileId: string,
+): KernelSnapshot["workspaces"]["all"] {
   return (snapshot.profiles.workspaceIdsByProfile[profileId] ?? [])
     .map((workspaceId) => snapshot.workspaces.all.find((workspace) => workspace.id === workspaceId))
     .filter((workspace): workspace is KernelSnapshot["workspaces"]["all"][number] => Boolean(workspace))
-    .filter((workspace) => workspace.id !== DESKTOP_HOME_DEFAULT_SPACE_ID && workspace.lifecycleState !== "deleted" && workspace.lifecycleState !== "archived");
+    .filter(
+      (workspace) =>
+        workspace.id !== DESKTOP_HOME_DEFAULT_SPACE_ID &&
+        workspace.lifecycleState !== "deleted" &&
+        workspace.lifecycleState !== "archived",
+    );
 }
 
-export function getMoveWorkspaceOptions(snapshot: KernelSnapshot, resource: ResourceSnapshot): KernelSnapshot["workspaces"]["all"] {
+export function getMoveWorkspaceOptions(
+  snapshot: KernelSnapshot,
+  resource: ResourceSnapshot,
+): KernelSnapshot["workspaces"]["all"] {
   const desktopDefaultSpace = getDesktopHomeDefaultSpace(snapshot);
   const isDesktopResource = resource.defaultSpace === "user" || resource.profileId === "desktop-user";
   const profileWorkspaces = isDesktopResource
     ? snapshot.profiles.all.flatMap((profile) => getImportWorkspaceOptions(snapshot, profile.id))
     : getImportWorkspaceOptions(snapshot, resource.profileId);
 
-  return [
-    ...(desktopDefaultSpace ? [desktopDefaultSpace] : []),
-    ...profileWorkspaces,
-  ].filter((workspace, index, all) => all.findIndex((candidate) => candidate.id === workspace.id) === index);
+  return [...(desktopDefaultSpace ? [desktopDefaultSpace] : []), ...profileWorkspaces].filter(
+    (workspace, index, all) => all.findIndex((candidate) => candidate.id === workspace.id) === index,
+  );
 }
 
 export function destinationFromWorkspace(snapshot: KernelSnapshot, workspaceId: string): ImportDestination {
   const workspace = snapshot.workspaces.all.find((candidate) => candidate.id === workspaceId);
-  const profile = workspace ? snapshot.profiles.all.find((candidate) => candidate.id === workspace.profileId) : undefined;
+  const profile = workspace
+    ? snapshot.profiles.all.find((candidate) => candidate.id === workspace.profileId)
+    : undefined;
   return {
     profileId: workspaceId === DESKTOP_HOME_DEFAULT_SPACE_ID ? undefined : workspace?.profileId,
     workspaceId,
-    defaultSpace: workspaceId === DESKTOP_HOME_DEFAULT_SPACE_ID
-      ? "user"
-      : profile?.defaultSpaceId === workspaceId
-        ? "profile"
-        : "none",
+    defaultSpace:
+      workspaceId === DESKTOP_HOME_DEFAULT_SPACE_ID
+        ? "user"
+        : profile?.defaultSpaceId === workspaceId
+          ? "profile"
+          : "none",
   };
 }
 
@@ -182,6 +210,10 @@ export function isFolderResource(resource: { type: string; metadata: { kind: str
   return resource.type === "inode/directory" || resource.metadata.kind === "folder";
 }
 
+export function isReferencedResource(resource: ResourceSnapshot): boolean {
+  return resource.tags.includes("linked") || resource.metadata.attributes?.resourceLocationKind === "local-linked";
+}
+
 export function isVisibleResource(resource: ResourceSnapshot | undefined): resource is ResourceSnapshot {
   return Boolean(resource && resource.lifecycleState !== "deleted");
 }
@@ -191,7 +223,9 @@ export function isTaskResource(resource: ResourceSnapshot | undefined): resource
 }
 
 export function isBookmarkResource(resource: ResourceSnapshot | undefined): resource is ResourceSnapshot {
-  return Boolean(resource && (resource.metadata.kind === "bookmark" || resource.type === "application/vnd.karya.bookmark"));
+  return Boolean(
+    resource && (resource.metadata.kind === "bookmark" || resource.type === "application/vnd.karya.bookmark"),
+  );
 }
 
 export function isCalendarEvent(event: EventSnapshot | undefined): event is EventSnapshot {
@@ -200,14 +234,18 @@ export function isCalendarEvent(event: EventSnapshot | undefined): event is Even
 
 export function isEditableNativeNote(resource: ResourceSnapshot | undefined): resource is ResourceSnapshot {
   if (!resource) return false;
-  return resource.metadata.kind === "note"
-    && resource.metadata.attributes?.noteOrigin !== "linked"
-    && resource.metadata.attributes?.noteEditableInKarya !== false;
+  return (
+    resource.metadata.kind === "note" &&
+    resource.metadata.attributes?.noteOrigin !== "linked" &&
+    resource.metadata.attributes?.noteEditableInKarya !== false
+  );
 }
 
 export function readTaskStatus(resource: ResourceSnapshot): TaskStatus {
   const value = readStringAttribute(resource, "taskStatus");
-  return value === "in-progress" || value === "blocked" || value === "completed" || value === "archived" ? value : "todo";
+  return value === "in-progress" || value === "blocked" || value === "completed" || value === "archived"
+    ? value
+    : "todo";
 }
 
 export function readTaskPriority(resource: ResourceSnapshot): TaskPriority {
@@ -248,10 +286,12 @@ export function readBookmarkLabels(resource: ResourceSnapshot): string[] {
 }
 
 export function readBookmarkDomain(resource: ResourceSnapshot): string {
-  return readStringAttribute(resource, "bookmarkDomain")
-    ?? readStringAttribute(resource, "bookmarkWebsiteName")
-    ?? readStringAttribute(resource, "bookmarkUrl")
-    ?? "Web";
+  return (
+    readStringAttribute(resource, "bookmarkDomain") ??
+    readStringAttribute(resource, "bookmarkWebsiteName") ??
+    readStringAttribute(resource, "bookmarkUrl") ??
+    "Web"
+  );
 }
 
 export function isBookmarkPinned(resource: ResourceSnapshot): boolean {
@@ -287,9 +327,13 @@ export function formatBookmarkFilter(filter: BookmarkReadingStatus | "all" | "pi
   return formatBookmarkStatus(filter);
 }
 
-export function countBookmarks(bookmarks: ResourceSnapshot[], filter: BookmarkReadingStatus | "all" | "pinned" | "favorite"): number {
+export function countBookmarks(
+  bookmarks: ResourceSnapshot[],
+  filter: BookmarkReadingStatus | "all" | "pinned" | "favorite",
+): number {
   if (filter === "pinned") return bookmarks.filter(isBookmarkPinned).length;
-  if (filter === "favorite") return bookmarks.filter((bookmark) => readBooleanAttribute(bookmark, "bookmarkFavorite")).length;
+  if (filter === "favorite")
+    return bookmarks.filter((bookmark) => readBooleanAttribute(bookmark, "bookmarkFavorite")).length;
   if (filter === "all") return bookmarks.filter((bookmark) => readBookmarkStatus(bookmark) !== "archived").length;
   return bookmarks.filter((bookmark) => readBookmarkStatus(bookmark) === filter).length;
 }
@@ -312,7 +356,9 @@ export function readCalendarRelatedIds(resource: EventSnapshot): string[] {
 
 export function readCalendarCategory(resource: EventSnapshot): CalendarEventCategory {
   const value = readStringAttribute(resource, "calendarCategory");
-  return value === "focus" || value === "deadline" || value === "reminder" || value === "personal" || value === "other" ? value : "meeting";
+  return value === "focus" || value === "deadline" || value === "reminder" || value === "personal" || value === "other"
+    ? value
+    : "meeting";
 }
 
 export function readCalendarColor(resource: EventSnapshot): string {
@@ -330,7 +376,9 @@ export function readCalendarTimeLabel(resource: EventSnapshot): string {
 export function compareCalendarEvents(left: EventSnapshot, right: EventSnapshot): number {
   const dateDiff = readCalendarStartDate(left).localeCompare(readCalendarStartDate(right));
   if (dateDiff !== 0) return dateDiff;
-  const timeDiff = (readStringAttribute(left, "calendarStartTime") ?? "").localeCompare(readStringAttribute(right, "calendarStartTime") ?? "");
+  const timeDiff = (readStringAttribute(left, "calendarStartTime") ?? "").localeCompare(
+    readStringAttribute(right, "calendarStartTime") ?? "",
+  );
   if (timeDiff !== 0) return timeDiff;
   return left.metadata.title.localeCompare(right.metadata.title);
 }
@@ -357,7 +405,8 @@ export function formatCalendarDateRange(resource: EventSnapshot): string {
   const start = readCalendarStartDate(resource);
   const end = readCalendarEndDate(resource);
   const time = readCalendarTimeLabel(resource);
-  const dateLabel = start === end ? formatTaskDateLabel(start) : `${formatTaskDateLabel(start)} - ${formatTaskDateLabel(end)}`;
+  const dateLabel =
+    start === end ? formatTaskDateLabel(start) : `${formatTaskDateLabel(start)} - ${formatTaskDateLabel(end)}`;
   return time ? `${dateLabel} · ${time}` : dateLabel;
 }
 
@@ -403,7 +452,8 @@ export function filterTasks(tasks: ResourceSnapshot[], filter: TaskFilter): Reso
   return tasks.filter((task) => {
     if (filter === "pinned") return isTaskPinned(task);
     if (filter === "today") return isTaskDueToday(task);
-    if (filter === "upcoming") return Boolean(readStringAttribute(task, "taskDueDate")) && !isTaskDueToday(task) && !isTaskOverdue(task);
+    if (filter === "upcoming")
+      return Boolean(readStringAttribute(task, "taskDueDate")) && !isTaskDueToday(task) && !isTaskOverdue(task);
     if (filter === "completed") return readTaskStatus(task) === "completed";
     if (filter === "archived") return task.lifecycleState === "archived" || readTaskStatus(task) === "archived";
     return task.lifecycleState !== "deleted" && readTaskStatus(task) !== "archived";
@@ -567,10 +617,12 @@ export function applicationSupportsResource(application: ApplicationSnapshot, re
   const kind = resource.metadata.kind;
   return supportedTypes.some((supportedType) => {
     const normalized = supportedType.toLocaleLowerCase();
-    return normalized === mimeType.toLocaleLowerCase()
-      || normalized === kind.toLocaleLowerCase()
-      || Boolean(extension && normalized === extension.toLocaleLowerCase())
-      || Boolean(extension && normalized === `.${extension.toLocaleLowerCase()}`);
+    return (
+      normalized === mimeType.toLocaleLowerCase() ||
+      normalized === kind.toLocaleLowerCase() ||
+      Boolean(extension && normalized === extension.toLocaleLowerCase()) ||
+      Boolean(extension && normalized === `.${extension.toLocaleLowerCase()}`)
+    );
   });
 }
 
@@ -605,6 +657,11 @@ export async function runResourceAction(
     case "reveal":
       await handlers.reveal(resource.id);
       return;
+    case "open-in-code":
+    case "copy-path":
+    case "remove-reference":
+    case "show-metadata":
+      return;
     case "rename":
       handlers.rename(resource);
       return;
@@ -632,25 +689,16 @@ export async function runResourceAction(
   }
 }
 
-export function readStringAttribute(
-  resource: MetadataCarrier | undefined,
-  key: string,
-): string | undefined {
+export function readStringAttribute(resource: MetadataCarrier | undefined, key: string): string | undefined {
   const value = resource?.metadata.attributes?.[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-export function readBooleanAttribute(
-  resource: MetadataCarrier | undefined,
-  key: string,
-): boolean {
+export function readBooleanAttribute(resource: MetadataCarrier | undefined, key: string): boolean {
   return resource?.metadata.attributes?.[key] === true;
 }
 
-export function readNumberAttribute(
-  resource: ResourceSnapshot | undefined,
-  key: string,
-): number | undefined {
+export function readNumberAttribute(resource: ResourceSnapshot | undefined, key: string): number | undefined {
   const value = resource?.metadata.attributes?.[key];
   return typeof value === "number" ? value : undefined;
 }

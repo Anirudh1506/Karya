@@ -3,15 +3,18 @@ import type { WorkspaceState } from "../types";
 
 const DESKTOP_HOME_DEFAULT_SPACE_ID = "workspace-desktop-home-default-space";
 
-export function deriveWorkspaces(workspaces: Workspace[], activeWorkspaceId?: EntityId): Omit<WorkspaceState, "resourceCountByWorkspace" | "resourceIdsByWorkspace"> {
+export function deriveWorkspaces(
+  workspaces: Workspace[],
+  activeWorkspaceId?: EntityId,
+): Omit<WorkspaceState, "resourceCountByWorkspace" | "resourceIdsByWorkspace"> {
   const visible = workspaces.filter((workspace) => workspace.lifecycleState !== "deleted");
   const open = visible.filter((workspace) => workspace.lifecycleState === "open");
   const archived = workspaces.filter((workspace) => workspace.lifecycleState === "archived");
   const pinned = visible.filter((workspace) => workspace.pinned);
-  const active = visible.find((workspace) => workspace.id === activeWorkspaceId) ?? open[0];
-  const recent = [...visible].sort((left, right) =>
-    (right.lastOpenedAt ?? right.updatedAt).localeCompare(left.lastOpenedAt ?? left.updatedAt),
-  ).slice(0, 8);
+  const active = activeWorkspaceId ? visible.find((workspace) => workspace.id === activeWorkspaceId) : undefined;
+  const recent = [...visible]
+    .sort((left, right) => (right.lastOpenedAt ?? right.updatedAt).localeCompare(left.lastOpenedAt ?? left.updatedAt))
+    .slice(0, 8);
 
   return {
     all: workspaces,

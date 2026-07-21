@@ -5,9 +5,7 @@ let shellAdapter: ShellAdapter | undefined;
 let bootPromise: Promise<void> | undefined;
 
 export function getShellAdapter(): ShellAdapter {
-  shellAdapter ??= window.karyaShell?.invoke
-    ? createIpcShellAdapter()
-    : createFallbackShellAdapter();
+  shellAdapter ??= window.karyaShell?.invoke ? createIpcShellAdapter() : createFallbackShellAdapter();
   return shellAdapter;
 }
 
@@ -26,6 +24,18 @@ function createIpcShellAdapter(): ShellAdapter {
 
   return {
     boot: () => invoke("boot"),
+    currentAccount: () => invoke("currentAccount"),
+    renameAccount: (displayName) => invoke("renameAccount", displayName),
+    trustedDevices: () => invoke("trustedDevices"),
+    currentDevice: () => invoke("currentDevice"),
+    renameDevice: (deviceId, name) => invoke("renameDevice", deviceId, name),
+    removeDevice: (deviceId) => invoke("removeDevice", deviceId),
+    replicaMembership: () => invoke("replicaMembership"),
+    getTransportStatus: () => invoke("getTransportStatus"),
+    connectTransport: () => invoke("connectTransport"),
+    disconnectTransport: () => invoke("disconnectTransport"),
+    reconnectTransport: () => invoke("reconnectTransport"),
+    synchronizeTransport: () => invoke("synchronizeTransport"),
     subscribe: (listener) => window.karyaShell?.subscribe(listener) ?? (() => {}),
     subscribeImports: (listener) => window.karyaShell?.subscribeImports(listener) ?? (() => {}),
     getSnapshot: () => invoke("getSnapshot"),
@@ -81,8 +91,7 @@ function createIpcShellAdapter(): ShellAdapter {
     restoreResource: (resourceId) => invoke("restoreResource", resourceId),
     addWorkspaceReference: (resourceId, workspaceId, makePrimary) =>
       invoke("addWorkspaceReference", resourceId, workspaceId, makePrimary),
-    removeWorkspaceReference: (resourceId, workspaceId) =>
-      invoke("removeWorkspaceReference", resourceId, workspaceId),
+    removeWorkspaceReference: (resourceId, workspaceId) => invoke("removeWorkspaceReference", resourceId, workspaceId),
     updateResourceMetadata: (resourceId, metadata) => invoke("updateResourceMetadata", resourceId, metadata),
     createRelationship: (sourceId, sourceType, targetId, targetType, relationshipType) =>
       invoke("createRelationship", sourceId, sourceType, targetId, targetType, relationshipType),
@@ -103,6 +112,7 @@ function createIpcShellAdapter(): ShellAdapter {
     deleteWorkspace: (workspaceId) => invoke("deleteWorkspace", workspaceId),
     pinWorkspace: (workspaceId, pinned) => invoke("pinWorkspace", workspaceId, pinned),
     updateWorkspaceLaunchSet: (workspaceId, launchSet) => invoke("updateWorkspaceLaunchSet", workspaceId, launchSet),
+    updateWorkspaceSettings: (workspaceId, update) => invoke("updateWorkspaceSettings", workspaceId, update),
     createProfile: (name, options) => invoke("createProfile", name, options),
     openProfile: (profileId) => invoke("openProfile", profileId),
     viewProfile: (profileId) => invoke("viewProfile", profileId),

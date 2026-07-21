@@ -1,7 +1,4 @@
-import {
-  createKaryaCore,
-  type KaryaCommand,
-} from "@karya/core";
+import { createKaryaCore, type KaryaCommand } from "@karya/core";
 import { NoopPlatformProviders } from "@karya/platform";
 import type { SearchResult } from "@karya/types";
 import type { ShellAdapter, ShellAdapterOptions } from "./contracts";
@@ -15,6 +12,42 @@ export function createShellAdapter(options: ShellAdapterOptions = {}): ShellAdap
     core.commandBus.execute<TResult>(command);
 
   return {
+    currentAccount() {
+      return core.shell.currentAccount();
+    },
+    renameAccount(displayName) {
+      return core.shell.renameAccount(displayName);
+    },
+    trustedDevices() {
+      return core.shell.trustedDevices();
+    },
+    currentDevice() {
+      return core.shell.currentDevice();
+    },
+    renameDevice(deviceId, name) {
+      return core.shell.renameDevice(deviceId, name);
+    },
+    removeDevice(deviceId) {
+      return core.shell.removeDevice(deviceId);
+    },
+    replicaMembership() {
+      return core.shell.replicaMembership();
+    },
+    getTransportStatus() {
+      return core.shell.getTransportStatus();
+    },
+    connectTransport() {
+      return core.shell.connectTransport();
+    },
+    disconnectTransport() {
+      return core.shell.disconnectTransport();
+    },
+    reconnectTransport() {
+      return core.shell.reconnectTransport();
+    },
+    synchronizeTransport() {
+      return core.shell.synchronizeTransport();
+    },
     async boot() {
       await core.boot();
     },
@@ -71,7 +104,12 @@ export function createShellAdapter(options: ShellAdapterOptions = {}): ShellAdap
 
     async executeSearchResult(result: SearchResult) {
       const query = (await core.shell.getSnapshot()).search.query.trim() || result.document.title;
-      await executeSearchResult(() => core.shell.getSnapshot(), executeCommand, result, core.registry.resolve("commandRegistry"));
+      await executeSearchResult(
+        () => core.shell.getSnapshot(),
+        executeCommand,
+        result,
+        core.registry.resolve("commandRegistry"),
+      );
       await core.registry.resolve("eventBus").publish("SearchExecuted", { query, result });
     },
 
@@ -320,6 +358,10 @@ export function createShellAdapter(options: ShellAdapterOptions = {}): ShellAdap
 
     updateWorkspaceLaunchSet(workspaceId, launchSet) {
       return core.shell.updateWorkspaceLaunchSet(workspaceId, launchSet);
+    },
+
+    updateWorkspaceSettings(workspaceId, update) {
+      return core.shell.updateWorkspaceSettings(workspaceId, update);
     },
 
     createProfile(name, options) {

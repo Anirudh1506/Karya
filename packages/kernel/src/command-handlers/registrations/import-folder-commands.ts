@@ -1,6 +1,5 @@
-import type { Resource } from "@karya/types";
+import { fileNameFromPath, parentPath, type Resource } from "@karya/types";
 import type { CommandBus } from "../../command-bus";
-import { basename, dirname } from "node:path";
 import {
   assertPathAvailable,
   checkResourceAvailability,
@@ -37,14 +36,14 @@ import {
 } from "../helpers";
 
 export function registerImportFolderCommandHandlers(commandBus: CommandBus): void {
-commandBus.register("ImportContentCommand", async (command, context) => {
+  commandBus.register("ImportContentCommand", async (command, context) => {
     if (!context.contentStore) {
       throw new Error("Content store is not configured");
     }
 
     const pendingImport = await context.contentStore.prepareImport({
       path: command.payload.path,
-      originalName: command.payload.displayTitle ?? basename(command.payload.path),
+      originalName: command.payload.displayTitle ?? fileNameFromPath(command.payload.path),
     });
     context.afterRollback(() => pendingImport.rollback());
 
@@ -73,17 +72,19 @@ commandBus.register("ImportContentCommand", async (command, context) => {
           contentOriginalName: content.originalName ?? null,
           contentExtension: content.extension ?? null,
           contentSourcePath: command.payload.path,
-          contentContainingDirectory: dirname(command.payload.path),
+          contentContainingDirectory: parentPath(command.payload.path),
           resourceHealth: "available",
           resourceLocationKind: "local",
           resourceLastVerifiedAt: new Date().toISOString(),
           folderParentId: command.payload.folderParentId ?? null,
           folderRelativePath: command.payload.relativePath ?? null,
-          ...(isImportedNote ? {
-            noteOrigin: "imported",
-            noteEditableInKarya: true,
-            ...createNoteContentAttributes(importedNoteContent),
-          } : {}),
+          ...(isImportedNote
+            ? {
+                noteOrigin: "imported",
+                noteEditableInKarya: true,
+                ...createNoteContentAttributes(importedNoteContent),
+              }
+            : {}),
         },
       },
     });
@@ -105,7 +106,7 @@ commandBus.register("ImportContentCommand", async (command, context) => {
   commandBus.register("CreateFolderResourceCommand", async (command, { registry, publish }) => {
     const destination = await resolveImportDestination(command.payload.destination, { registry });
     const folder = await registry.resolve("resourceService").create({
-      displayTitle: command.payload.displayTitle ?? basename(command.payload.path),
+      displayTitle: command.payload.displayTitle ?? fileNameFromPath(command.payload.path),
       type: "inode/directory",
       owner: destination.profileId,
       profileId: destination.profileId,
@@ -119,7 +120,7 @@ commandBus.register("ImportContentCommand", async (command, context) => {
         attributes: {
           folderPath: command.payload.path,
           contentSourcePath: command.payload.path,
-          contentContainingDirectory: dirname(command.payload.path),
+          contentContainingDirectory: parentPath(command.payload.path),
           folderImportStatus: "queued",
           folderIndexedCount: 0,
           folderChildCount: 0,
@@ -159,12 +160,18 @@ commandBus.register("ImportContentCommand", async (command, context) => {
     if (folder.metadata.kind !== "folder" && folder.type !== "inode/directory") {
       throw new Error(`Resource is not a folder: ${folder.id}`);
     }
+    if (isLinkedResource(folder)) {
+      return openResourceById(folder.id, context);
+    }
     const requestedWorkspaceId = command.payload.workspaceId;
-    const workspaceId = requestedWorkspaceId && folder.workspaceRefs.includes(requestedWorkspaceId)
-      ? requestedWorkspaceId
-      : folder.primaryWorkspaceId ?? folder.workspaceRefs[0];
+    const workspaceId =
+      requestedWorkspaceId && folder.workspaceRefs.includes(requestedWorkspaceId)
+        ? requestedWorkspaceId
+        : (folder.primaryWorkspaceId ?? folder.workspaceRefs[0]);
     const workspace = workspaceId
-      ? (await context.registry.resolve("workspaceService").listWorkspaces()).find((candidate) => candidate.id === workspaceId)
+      ? (await context.registry.resolve("workspaceService").listWorkspaces()).find(
+          (candidate) => candidate.id === workspaceId,
+        )
       : undefined;
     if (workspaceId) {
       await context.registry.resolve("continuityService").updateWorkspaceNavigation({

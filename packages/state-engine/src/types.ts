@@ -1,4 +1,5 @@
 import type {
+  ContinueWorkingItem,
   ContinuitySession,
   EntityId,
   CalendarEvent,
@@ -66,6 +67,7 @@ export interface ResourceState {
   active?: Resource;
   selectedId?: EntityId;
   recent: Resource[];
+  recentModifiedByWorkspace: Record<EntityId, Resource[]>;
   topLevel: Resource[];
   folders: Resource[];
   childrenByFolder: Record<EntityId, Resource[]>;
@@ -118,6 +120,7 @@ export interface ApplicationState {
 }
 
 export interface ContinuityState {
+  continueWorking: ContinueWorkingItem[];
   currentSession?: ContinuitySession;
   activeWorkspaceSession?: ContinuityWorkspaceSession;
   resumeContext?: ContinuitySession["resumeContext"];
@@ -200,7 +203,13 @@ export interface ShellState {
     | { type: "folder"; resourceId: EntityId }
     | { type: "profile"; profileId: EntityId }
     | { type: "workspace"; workspaceId: EntityId };
-  breadcrumbs: Array<{ id: EntityId; label: string; profileId?: EntityId; resourceId?: EntityId; workspaceId?: EntityId }>;
+  breadcrumbs: Array<{
+    id: EntityId;
+    label: string;
+    profileId?: EntityId;
+    resourceId?: EntityId;
+    workspaceId?: EntityId;
+  }>;
   activeDialog?: string;
   systemStatus: "initializing" | "ready" | "degraded";
 }

@@ -7,6 +7,10 @@ out
 *.log
 apps/shell/release/
 apps/shell/build/app/
+apps/shell/build/electron-dist-clean/
 apps/shell/build/Karya.iconset/
 apps/shell/build/icon-*.png
 apps/shell/build/icon-source.png
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/

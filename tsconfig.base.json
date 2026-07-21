@@ -16,9 +16,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "@karya/account-service": ["./packages/account-service/src/index.ts"],
       "@karya/application-registry": ["./packages/application-registry/src/index.ts"],
       "@karya/activity-service": ["./packages/activity-service/src/index.ts"],
       "@karya/content-store": ["./packages/content-store/src/index.ts"],
+      "@karya/content-store/node": ["./packages/content-store/src/filesystem-content-store.ts"],
       "@karya/command-registry": ["./packages/command-registry/src/index.ts"],
       "@karya/continuity-service": ["./packages/continuity-service/src/index.ts"],
       "@karya/core": ["./packages/core/src/index.ts"],
@@ -26,6 +28,7 @@
       "@karya/event-bus": ["./packages/event-bus/src/index.ts"],
       "@karya/event-service": ["./packages/event-service/src/index.ts"],
       "@karya/import-service": ["./packages/import-service/src/index.ts"],
+      "@karya/import-service/node": ["./packages/import-service/src/node-import-source-provider.ts"],
       "@karya/kernel": ["./packages/kernel/src/index.ts"],
       "@karya/metadata-store": ["./packages/metadata-store/src/index.ts"],
       "@karya/notification-service": ["./packages/notification-service/src/index.ts"],
@@ -40,6 +43,7 @@
       "@karya/shell-adapter": ["./packages/shell-adapter/src/index.ts"],
       "@karya/state-engine": ["./packages/state-engine/src/index.ts"],
       "@karya/types": ["./packages/types/src/index.ts"],
+      "@karya/transport-service": ["./packages/transport-service/src/index.ts"],
       "@karya/ui": ["./packages/ui/src/index.ts"],
       "@karya/workspace-service": ["./packages/workspace-service/src/index.ts"]
     }

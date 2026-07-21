@@ -82,12 +82,11 @@ export async function updateNativeTask(
 ): Promise<Resource> {
   const now = new Date().toISOString();
   const nextStatus = patch.status ?? readTaskString(resource, "taskStatus") ?? "todo";
-  const completedAt = nextStatus === "completed"
-    ? readTaskString(resource, "taskCompletedAt") ?? now
-    : "";
+  const completedAt = nextStatus === "completed" ? (readTaskString(resource, "taskCompletedAt") ?? now) : "";
   return registryUpdateMetadata(context, resource.id, {
     title: patch.title?.trim() || resource.metadata.title,
-    description: typeof patch.description === "string" ? summarizeTask(patch.description) : resource.metadata.description,
+    description:
+      typeof patch.description === "string" ? summarizeTask(patch.description) : resource.metadata.description,
     attributes: {
       ...(resource.metadata.attributes ?? {}),
       ...createTaskAttributes({
@@ -139,7 +138,7 @@ export function createTaskAttributes(input: {
     taskDescription: description,
     taskDescriptionFormat: "html",
     taskChecklistItems: input.checklistItems.join("\n"),
-    taskChecklistCompleted: input.checklistCompleted.map((checked) => checked ? "1" : "0").join("\n"),
+    taskChecklistCompleted: input.checklistCompleted.map((checked) => (checked ? "1" : "0")).join("\n"),
     taskLabels: input.labels.join("\n"),
     taskStatus: input.status,
     taskPriority: input.priority,

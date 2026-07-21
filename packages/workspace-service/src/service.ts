@@ -1,10 +1,23 @@
-import { Identifier, Timestamp, Workspace as WorkspaceAggregate, type WorkspaceLayout, type WorkspaceRepository } from "@karya/domain";
+import {
+  Identifier,
+  Timestamp,
+  Workspace as WorkspaceAggregate,
+  type WorkspaceLayout,
+  type WorkspaceRepository,
+} from "@karya/domain";
 import type { EventBus } from "@karya/event-bus";
-import type { EntityId, Workspace, WorkspaceLaunchSet, WorkspaceReference } from "@karya/types";
+import type {
+  EntityId,
+  Workspace,
+  WorkspaceLaunchSet,
+  WorkspaceReference,
+  WorkspaceSettingsUpdate,
+} from "@karya/types";
 import type { CreateWorkspaceRequest, WorkspaceService } from "./contracts";
 import { publishWorkspaceDomainEvent } from "./events";
-import { toDomainLaunchSet, toDto } from "./mappers";
+import { toDomain, toDomainLaunchSet, toDto } from "./mappers";
 import { InMemoryWorkspaceRepository } from "./repository";
+import { WORKSPACE_NAME_REQUIRED_ERROR } from "./constants";
 
 export class InMemoryWorkspaceService implements WorkspaceService {
   private readonly repository: WorkspaceRepository;
@@ -17,10 +30,13 @@ export class InMemoryWorkspaceService implements WorkspaceService {
     repository?: WorkspaceRepository,
   ) {
     this.repository = repository ?? new InMemoryWorkspaceRepository(seed);
-    const activeWorkspace = seed.find((workspace) => workspace.id === activeWorkspaceId && workspace.lifecycleState !== "deleted");
-    this.activeWorkspaceId = activeWorkspace?.id
-      ?? seed.find((workspace) => workspace.lifecycleState === "open")?.id
-      ?? seed.find((workspace) => workspace.lifecycleState !== "deleted")?.id;
+    const activeWorkspace = seed.find(
+      (workspace) => workspace.id === activeWorkspaceId && workspace.lifecycleState !== "deleted",
+    );
+    this.activeWorkspaceId =
+      activeWorkspace?.id ??
+      seed.find((workspace) => workspace.lifecycleState === "open")?.id ??
+      seed.find((workspace) => workspace.lifecycleState !== "deleted")?.id;
   }
 
   async listWorkspaces(): Promise<Workspace[]> {
@@ -46,19 +62,29 @@ export class InMemoryWorkspaceService implements WorkspaceService {
   }
 
   async create(request: CreateWorkspaceRequest): Promise<Workspace> {
+    const name = request.name.trim();
+    if (!name) throw new Error(WORKSPACE_NAME_REQUIRED_ERROR);
     const occurredAt = new Date().toISOString();
     const aggregate = WorkspaceAggregate.createFromRequest({
       id: crypto.randomUUID(),
-      name: request.name,
+      name,
       profileId: request.profileId,
       owner: request.owner ?? request.profileId,
       description: request.description,
+      color: request.color,
+      icon: request.icon,
       templateId: request.templateId,
       createdBy: request.owner ?? request.profileId,
       occurredAt,
     });
     this.activeWorkspaceId = aggregate.toSnapshot().id.value;
     return this.saveAndPublish(aggregate);
+  }
+
+  async applyReplica(workspace: Workspace): Promise<Workspace> {
+    await this.repository.save(toDomain(workspace));
+    await this.eventBus.publish("WorkspaceUpdated", { workspace });
+    return workspace;
   }
 
   async open(id: EntityId): Promise<Workspace> {
@@ -169,6 +195,12 @@ export class InMemoryWorkspaceService implements WorkspaceService {
   async updateLaunchSet(workspaceId: EntityId, launchSet: WorkspaceLaunchSet | undefined): Promise<Workspace> {
     const aggregate = await this.requireWorkspace(workspaceId);
     aggregate.updateLaunchSet(launchSet ? toDomainLaunchSet(launchSet) : undefined, now());
+    return this.saveAndPublish(aggregate);
+  }
+
+  async updateSettings(workspaceId: EntityId, update: WorkspaceSettingsUpdate): Promise<Workspace> {
+    const aggregate = await this.requireWorkspace(workspaceId);
+    aggregate.updateSettings(update, now());
     return this.saveAndPublish(aggregate);
   }
 

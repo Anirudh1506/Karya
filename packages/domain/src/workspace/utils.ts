@@ -1,5 +1,12 @@
 import { Identifier, Label, Timestamp } from "../common";
-import type { WorkspaceId, WorkspaceLaunchSet, WorkspaceLayout, WorkspaceProps, WorkspaceSession } from "./types";
+import type {
+  WorkspaceId,
+  WorkspaceLaunchSet,
+  WorkspaceLayout,
+  WorkspaceProps,
+  WorkspaceSession,
+  WorkspaceSettings,
+} from "./types";
 
 export function normalizeProps(props: WorkspaceProps): WorkspaceProps {
   return {
@@ -12,6 +19,7 @@ export function normalizeProps(props: WorkspaceProps): WorkspaceProps {
     resourceRefs: uniqueByValue(props.resourceRefs),
     pinnedApplicationIds: uniqueByValue(props.pinnedApplicationIds),
     launchSet: props.launchSet ? cloneLaunchSet(props.launchSet) : undefined,
+    settings: props.settings ? cloneWorkspaceSettings(props.settings) : undefined,
     activeSession: props.activeSession ? cloneSession(props.activeSession) : undefined,
     preservedSession: props.preservedSession ? cloneSession(props.preservedSession) : undefined,
     permissions: {
@@ -21,7 +29,11 @@ export function normalizeProps(props: WorkspaceProps): WorkspaceProps {
   };
 }
 
-export function createSession(workspaceId: WorkspaceId, occurredAt: Timestamp, layout?: Partial<WorkspaceLayout>): WorkspaceSession {
+export function createSession(
+  workspaceId: WorkspaceId,
+  occurredAt: Timestamp,
+  layout?: Partial<WorkspaceLayout>,
+): WorkspaceSession {
   return {
     id: Identifier.from(`workspace-session-${workspaceId.value}-${occurredAt.value}`, "WorkspaceSessionId"),
     workspaceId,
@@ -49,6 +61,15 @@ export function cloneLaunchSet(launchSet: WorkspaceLaunchSet): WorkspaceLaunchSe
   return {
     ...launchSet,
     items: launchSet.items.map((item) => ({ ...item })),
+  };
+}
+
+export function cloneWorkspaceSettings(settings: WorkspaceSettings): WorkspaceSettings {
+  return {
+    appearance: { ...settings.appearance },
+    experience: { ...settings.experience },
+    continuity: { ...settings.continuity },
+    preferences: { ...settings.preferences },
   };
 }
 

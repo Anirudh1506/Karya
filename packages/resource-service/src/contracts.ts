@@ -38,8 +38,14 @@ export interface ResourceService {
   updateLifecycle(id: EntityId, lifecycleState: LifecycleState): Promise<Resource>;
   addWorkspaceReference(id: EntityId, workspaceId: EntityId, makePrimary?: boolean): Promise<Resource>;
   removeWorkspaceReference(id: EntityId, workspaceId: EntityId): Promise<Resource>;
-  addRelationship(sourceId: EntityId, targetResourceId: EntityId, type: Resource["relationships"][number]["type"], metadata?: Record<string, string>): Promise<Resource>;
+  addRelationship(
+    sourceId: EntityId,
+    targetResourceId: EntityId,
+    type: Resource["relationships"][number]["type"],
+    metadata?: Record<string, string>,
+  ): Promise<Resource>;
   removeRelationship(sourceId: EntityId, relationshipId: EntityId): Promise<Resource>;
   updateMetadata(id: EntityId, metadata: Partial<Resource["metadata"]>): Promise<Resource>;
   execute(command: ResourceCommand): Promise<Resource>;
+  applyReplica(resource: Resource): Promise<Resource>;
 }

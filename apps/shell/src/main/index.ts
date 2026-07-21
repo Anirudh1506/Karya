@@ -1,12 +1,23 @@
 import { createKaryaCore } from "@karya/core";
-import { FileSystemContentStore } from "@karya/content-store";
-import { NodeImportSourceProvider } from "@karya/import-service";
+import { FileSystemContentStore } from "@karya/content-store/node";
+import { NodeImportSourceProvider } from "@karya/import-service/node";
 import { KaryaMetadataStore } from "@karya/metadata-store";
 import { createShellAdapter, type ShellAdapter } from "@karya/shell-adapter";
 import type { ImportDestination, SearchResult } from "@karya/types";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, type MenuItemConstructorOptions, type MessageBoxOptions } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  type MenuItemConstructorOptions,
+  type MessageBoxOptions,
+} from "electron";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { NATIVE_COMMANDS } from "../constants";
 import { ElectronPlatformProviders } from "../platform/electron-platform";
 
 const isDev = process.env.NODE_ENV === "development" || Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -117,18 +128,50 @@ async function initializeShell(): Promise<void> {
     });
   });
 
-  ipcMain.handle("karya:shell:invoke", async (_event, method: keyof ShellAdapter | "executeSearchResult", args: unknown[] = []) => {
-    return invokeShellMethod(adapter, method, args);
-  });
-  ipcMain.handle("karya:profile-context-menu", async (_event, profile: { id: string; name: string; archived: boolean }) => {
-    return showProfileContextMenu(profile);
-  });
-  ipcMain.handle("karya:resource-context-menu", async (_event, resource: { id: string; title: string; archived: boolean; hasLocation: boolean }) => {
-    return showResourceContextMenu(resource);
-  });
-  ipcMain.handle("karya:application-context-menu", async (_event, application: { id: string; name: string; pinned: boolean; favorite: boolean; preferred: boolean; hasActiveWorkspace: boolean }) => {
-    return showApplicationContextMenu(application);
-  });
+  ipcMain.handle(
+    "karya:shell:invoke",
+    async (_event, method: keyof ShellAdapter | "executeSearchResult", args: unknown[] = []) => {
+      return invokeShellMethod(adapter, method, args);
+    },
+  );
+  ipcMain.handle(
+    "karya:profile-context-menu",
+    async (_event, profile: { id: string; name: string; archived: boolean }) => {
+      return showProfileContextMenu(profile);
+    },
+  );
+  ipcMain.handle(
+    "karya:resource-context-menu",
+    async (
+      _event,
+      resource: {
+        id: string;
+        title: string;
+        archived: boolean;
+        hasLocation: boolean;
+        referencedFolder: boolean;
+        canOpenInCode: boolean;
+      },
+    ) => {
+      return showResourceContextMenu(resource);
+    },
+  );
+  ipcMain.handle(
+    "karya:application-context-menu",
+    async (
+      _event,
+      application: {
+        id: string;
+        name: string;
+        pinned: boolean;
+        favorite: boolean;
+        preferred: boolean;
+        hasActiveWorkspace: boolean;
+      },
+    ) => {
+      return showApplicationContextMenu(application);
+    },
+  );
 }
 
 function installApplicationMenu(): void {
@@ -160,10 +203,22 @@ function createApplicationMenu(): MenuItemConstructorOptions[] {
     {
       label: "File",
       submenu: [
-        { label: "New Workspace", accelerator: "CommandOrControl+Shift+N", click: () => void createWorkspaceFromMenu() },
+        {
+          label: "New Workspace",
+          accelerator: "CommandOrControl+Shift+N",
+          click: () => void createWorkspaceFromMenu(),
+        },
         { type: "separator" },
-        { label: "Import File...", accelerator: "CommandOrControl+I", click: () => void getShellAdapter().importFileFromPicker(undefined) },
-        { label: "Import Folder...", accelerator: "CommandOrControl+Shift+I", click: () => void getShellAdapter().importDirectoryFromPicker(undefined) },
+        {
+          label: "Reference File...",
+          accelerator: "CommandOrControl+I",
+          click: () => void getShellAdapter().linkFileFromPicker(undefined),
+        },
+        {
+          label: "Reference Folder...",
+          accelerator: "CommandOrControl+Shift+I",
+          click: () => void getShellAdapter().linkDirectoryFromPicker(undefined),
+        },
         { type: "separator" },
         { label: "Settings...", accelerator: "CommandOrControl+,", click: () => sendNativeCommand("open-settings") },
         { type: "separator" },
@@ -185,9 +240,21 @@ function createApplicationMenu(): MenuItemConstructorOptions[] {
     {
       label: "View",
       submenu: [
-        { label: "Toggle Sidebar", accelerator: "CommandOrControl+B", click: () => sendNativeCommand("toggle-sidebar") },
-        { label: "Toggle Inspector", accelerator: "CommandOrControl+Shift+B", click: () => sendNativeCommand("toggle-inspector") },
-        { label: "Toggle Dock", accelerator: "CommandOrControl+Shift+D", click: () => sendNativeCommand("toggle-dock") },
+        {
+          label: "Toggle Sidebar",
+          accelerator: "CommandOrControl+B",
+          click: () => sendNativeCommand("toggle-sidebar"),
+        },
+        {
+          label: "Toggle Inspector",
+          accelerator: "CommandOrControl+Shift+B",
+          click: () => sendNativeCommand("toggle-inspector"),
+        },
+        {
+          label: "Toggle Dock",
+          accelerator: "CommandOrControl+Shift+D",
+          click: () => sendNativeCommand("toggle-dock"),
+        },
         { type: "separator" },
         { role: "reload", visible: isDev },
         { role: "forceReload", visible: isDev },
@@ -203,7 +270,11 @@ function createApplicationMenu(): MenuItemConstructorOptions[] {
     {
       label: "Workspace",
       submenu: [
-        { label: "Continue Working", accelerator: "CommandOrControl+Return", click: () => void continueActiveWorkspaceFromMenu() },
+        {
+          label: "Continue Working",
+          accelerator: "CommandOrControl+Return",
+          click: () => void continueActiveWorkspaceFromMenu(),
+        },
         { label: "Search", accelerator: "CommandOrControl+K", click: () => sendNativeCommand("open-search") },
         { label: "Activity", click: () => sendNativeCommand("open-activity") },
       ],
@@ -223,18 +294,21 @@ function createApplicationMenu(): MenuItemConstructorOptions[] {
 }
 
 async function createWorkspaceFromMenu(): Promise<void> {
-  await getShellAdapter().createWorkspace("New Workspace");
+  sendNativeCommand(NATIVE_COMMANDS.createWorkspace);
 }
 
 async function continueActiveWorkspaceFromMenu(): Promise<void> {
   const adapter = getShellAdapter();
   const snapshot = await adapter.getSnapshot();
-  const breadcrumbWorkspace = [...snapshot.shell.breadcrumbs].reverse().find((breadcrumb) => breadcrumb.workspaceId)?.workspaceId;
-  const activeWorkspaceId = snapshot.shell.activeSurface.type === "workspace"
-    ? snapshot.shell.activeSurface.workspaceId
-    : snapshot.shell.activeSurface.type === "folder"
-      ? breadcrumbWorkspace
-      : undefined;
+  const breadcrumbWorkspace = [...snapshot.shell.breadcrumbs]
+    .reverse()
+    .find((breadcrumb) => breadcrumb.workspaceId)?.workspaceId;
+  const activeWorkspaceId =
+    snapshot.shell.activeSurface.type === "workspace"
+      ? snapshot.shell.activeSurface.workspaceId
+      : snapshot.shell.activeSurface.type === "folder"
+        ? breadcrumbWorkspace
+        : undefined;
   if (activeWorkspaceId) {
     await adapter.resumeContext([activeWorkspaceId], activeWorkspaceId);
   }
@@ -271,20 +345,22 @@ function showAboutDialog(): void {
 
 function getAppIconPath(): string {
   const iconFile = process.platform === "win32" ? "icon.ico" : process.platform === "darwin" ? "icon.icns" : "icon.png";
-  return app.isPackaged
-    ? join(process.resourcesPath, iconFile)
-    : join(__dirname, "../../build", iconFile);
+  return app.isPackaged ? join(process.resourcesPath, iconFile) : join(__dirname, "../../build", iconFile);
 }
 
 function getWindowStatePath(): string {
   return join(app.getPath("userData"), "window-state.json");
 }
 
-function readWindowState(): { bounds: { x?: number; y?: number; width: number; height: number }; maximized: boolean } | undefined {
+function readWindowState():
+  { bounds: { x?: number; y?: number; width: number; height: number }; maximized: boolean } | undefined {
   const statePath = getWindowStatePath();
   if (!existsSync(statePath)) return undefined;
   try {
-    const state = JSON.parse(readFileSync(statePath, "utf8")) as { bounds?: { x?: number; y?: number; width?: number; height?: number }; maximized?: boolean };
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as {
+      bounds?: { x?: number; y?: number; width?: number; height?: number };
+      maximized?: boolean;
+    };
     if (!state.bounds?.width || !state.bounds?.height) return undefined;
     return {
       bounds: {
@@ -309,16 +385,13 @@ function writeWindowState(window: BrowserWindow): void {
 }
 
 type ProfileContextAction =
-  | "open"
-  | "rename"
-  | "create-workspace"
-  | "set-active"
-  | "archive"
-  | "restore"
-  | "delete"
-  | "properties";
+  "open" | "rename" | "create-workspace" | "set-active" | "archive" | "restore" | "delete" | "properties";
 
-function showProfileContextMenu(profile: { id: string; name: string; archived: boolean }): Promise<ProfileContextAction | undefined> {
+function showProfileContextMenu(profile: {
+  id: string;
+  name: string;
+  archived: boolean;
+}): Promise<ProfileContextAction | undefined> {
   return new Promise((resolve) => {
     let selected: ProfileContextAction | undefined;
     const choose = (action: ProfileContextAction) => {
@@ -349,6 +422,10 @@ type ResourceContextAction =
   | "open"
   | "open-with"
   | "reveal"
+  | "open-in-code"
+  | "copy-path"
+  | "remove-reference"
+  | "show-metadata"
   | "rename"
   | "duplicate"
   | "move"
@@ -358,30 +435,56 @@ type ResourceContextAction =
   | "delete"
   | "properties";
 
-function showResourceContextMenu(resource: { id: string; title: string; archived: boolean; hasLocation: boolean }): Promise<ResourceContextAction | undefined> {
+function showResourceContextMenu(resource: {
+  id: string;
+  title: string;
+  archived: boolean;
+  hasLocation: boolean;
+  referencedFolder: boolean;
+  canOpenInCode: boolean;
+}): Promise<ResourceContextAction | undefined> {
   return new Promise((resolve) => {
     let selected: ResourceContextAction | undefined;
     const choose = (action: ResourceContextAction) => {
       selected = action;
     };
-    const menu = Menu.buildFromTemplate([
-      { label: "Open", click: () => choose("open") },
-      { label: "Open With...", enabled: resource.hasLocation, click: () => choose("open-with") },
-      { label: "Reveal", enabled: resource.hasLocation, click: () => choose("reveal") },
-      { type: "separator" },
-      { label: "Rename", enabled: !resource.archived, click: () => choose("rename") },
-      { label: "Duplicate", click: () => choose("duplicate") },
-      { label: "Move To...", enabled: !resource.archived, click: () => choose("move") },
-      { label: "Add to Workspace...", enabled: !resource.archived, click: () => choose("add-to-workspace") },
-      { label: "Share...", enabled: false },
-      { type: "separator" },
-      resource.archived
-        ? { label: "Restore", click: () => choose("restore") }
-        : { label: "Archive", click: () => choose("archive") },
-      { label: "Delete", click: () => choose("delete") },
-      { type: "separator" },
-      { label: "Properties", click: () => choose("properties") },
-    ]);
+    const menu = Menu.buildFromTemplate(
+      resource.referencedFolder
+        ? [
+            {
+              label: process.platform === "darwin" ? "Reveal in Finder" : "Reveal in Explorer",
+              enabled: resource.hasLocation,
+              click: () => choose("reveal"),
+            },
+            {
+              label: "Open in VS Code",
+              enabled: resource.hasLocation && resource.canOpenInCode,
+              click: () => choose("open-in-code"),
+            },
+            { label: "Copy Path", enabled: resource.hasLocation, click: () => choose("copy-path") },
+            { type: "separator" },
+            { label: "Remove Reference", click: () => choose("remove-reference") },
+            { label: "Show Metadata", click: () => choose("show-metadata") },
+          ]
+        : [
+            { label: "Open", click: () => choose("open") },
+            { label: "Open With...", enabled: resource.hasLocation, click: () => choose("open-with") },
+            { label: "Reveal", enabled: resource.hasLocation, click: () => choose("reveal") },
+            { type: "separator" },
+            { label: "Rename", enabled: !resource.archived, click: () => choose("rename") },
+            { label: "Duplicate", click: () => choose("duplicate") },
+            { label: "Move To...", enabled: !resource.archived, click: () => choose("move") },
+            { label: "Add to Workspace...", enabled: !resource.archived, click: () => choose("add-to-workspace") },
+            { label: "Share...", enabled: false },
+            { type: "separator" },
+            resource.archived
+              ? { label: "Restore", click: () => choose("restore") }
+              : { label: "Archive", click: () => choose("archive") },
+            { label: "Delete", click: () => choose("delete") },
+            { type: "separator" },
+            { label: "Properties", click: () => choose("properties") },
+          ],
+    );
 
     menu.popup({
       callback: () => resolve(selected),
@@ -401,7 +504,14 @@ type ApplicationContextAction =
   | "remove-from-workspace"
   | "properties";
 
-function showApplicationContextMenu(application: { id: string; name: string; pinned: boolean; favorite: boolean; preferred: boolean; hasActiveWorkspace: boolean }): Promise<ApplicationContextAction | undefined> {
+function showApplicationContextMenu(application: {
+  id: string;
+  name: string;
+  pinned: boolean;
+  favorite: boolean;
+  preferred: boolean;
+  hasActiveWorkspace: boolean;
+}): Promise<ApplicationContextAction | undefined> {
   return new Promise((resolve) => {
     let selected: ApplicationContextAction | undefined;
     const choose = (action: ApplicationContextAction) => {
@@ -418,9 +528,21 @@ function showApplicationContextMenu(application: { id: string; name: string; pin
         ? { label: "Unfavorite", click: () => choose("unfavorite") }
         : { label: "Favorite", click: () => choose("favorite") },
       application.preferred
-        ? { label: "Remove as Workspace Preferred", enabled: application.hasActiveWorkspace, click: () => choose("unset-preferred") }
-        : { label: "Set as Workspace Preferred", enabled: application.hasActiveWorkspace, click: () => choose("set-preferred") },
-      { label: "Remove From Workspace", enabled: application.preferred && application.hasActiveWorkspace, click: () => choose("remove-from-workspace") },
+        ? {
+            label: "Remove as Workspace Preferred",
+            enabled: application.hasActiveWorkspace,
+            click: () => choose("unset-preferred"),
+          }
+        : {
+            label: "Set as Workspace Preferred",
+            enabled: application.hasActiveWorkspace,
+            click: () => choose("set-preferred"),
+          },
+      {
+        label: "Remove From Workspace",
+        enabled: application.preferred && application.hasActiveWorkspace,
+        click: () => choose("remove-from-workspace"),
+      },
       { type: "separator" },
       { label: "Properties", click: () => choose("properties") },
     ]);
@@ -447,9 +569,21 @@ function getShellAdapter(): ShellAdapter {
     importSourceProvider: new NodeImportSourceProvider(),
     platform,
     seed: {
-      includeDemoContent: isDev,
+      includeDemoContent: false,
     },
     persistence: {
+      accounts: store.accounts,
+      trustedDevices: store.trustedDevices,
+      transportSessions: store.transportSessions,
+      syncOperations: store.syncOperations,
+      syncDeviceStates: store.syncDeviceStates,
+      syncReplayReceipts: store.syncReplayReceipts,
+      syncConflicts: store.syncConflicts,
+      editableContents: store.editableContents,
+      editCheckpoints: store.editCheckpoints,
+      editSessions: store.editSessions,
+      activities: store.activities,
+      notifications: store.notifications,
       applications: store.applications,
       profiles: store.profiles,
       resourceQueries: store.resourceQueries,
@@ -465,13 +599,44 @@ function getShellAdapter(): ShellAdapter {
       seedIfEmpty: (seed) => store.seedIfEmpty(seed),
       close: () => store.close(),
     },
+    account: {
+      device: { name: app.getName(), platform: "macos", platformVersion: process.getSystemVersion() },
+    },
   });
   shellAdapter = createShellAdapter({ core, platform });
   return shellAdapter;
 }
 
-async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapter | "executeSearchResult", args: unknown[]): Promise<unknown> {
+async function invokeShellMethod(
+  adapter: ShellAdapter,
+  method: keyof ShellAdapter | "executeSearchResult",
+  args: unknown[],
+): Promise<unknown> {
   switch (method) {
+    case "currentAccount":
+      return adapter.currentAccount();
+    case "renameAccount":
+      return adapter.renameAccount(args[0] as string);
+    case "trustedDevices":
+      return adapter.trustedDevices();
+    case "currentDevice":
+      return adapter.currentDevice();
+    case "renameDevice":
+      return adapter.renameDevice(args[0] as string, args[1] as string);
+    case "removeDevice":
+      return adapter.removeDevice(args[0] as string);
+    case "replicaMembership":
+      return adapter.replicaMembership();
+    case "getTransportStatus":
+      return adapter.getTransportStatus();
+    case "connectTransport":
+      return adapter.connectTransport();
+    case "disconnectTransport":
+      return adapter.disconnectTransport();
+    case "reconnectTransport":
+      return adapter.reconnectTransport();
+    case "synchronizeTransport":
+      return adapter.synchronizeTransport();
     case "boot":
       return adapter.boot();
     case "getSnapshot":
@@ -495,11 +660,19 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "createResource":
       return adapter.createResource(args[0] as ImportDestination | undefined);
     case "createNote":
-      return adapter.createNote(args[0] as ImportDestination | undefined, args[1] as string | undefined, args[2] as string | undefined);
+      return adapter.createNote(
+        args[0] as ImportDestination | undefined,
+        args[1] as string | undefined,
+        args[2] as string | undefined,
+      );
     case "updateNoteContent":
       return adapter.updateNoteContent(args[0] as string, args[1] as string);
     case "createTask":
-      return adapter.createTask(args[0] as ImportDestination | undefined, args[1] as string | undefined, args[2] as Parameters<ShellAdapter["createTask"]>[2]);
+      return adapter.createTask(
+        args[0] as ImportDestination | undefined,
+        args[1] as string | undefined,
+        args[2] as Parameters<ShellAdapter["createTask"]>[2],
+      );
     case "updateTask":
       return adapter.updateTask(args[0] as string, args[1] as Parameters<ShellAdapter["updateTask"]>[1]);
     case "completeTask":
@@ -507,19 +680,34 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "reopenTask":
       return adapter.reopenTask(args[0] as string);
     case "createBookmark":
-      return adapter.createBookmark(args[0] as ImportDestination | undefined, args[1] as string, args[2] as Parameters<ShellAdapter["createBookmark"]>[2]);
+      return adapter.createBookmark(
+        args[0] as ImportDestination | undefined,
+        args[1] as string,
+        args[2] as Parameters<ShellAdapter["createBookmark"]>[2],
+      );
     case "updateBookmark":
       return adapter.updateBookmark(args[0] as string, args[1] as Parameters<ShellAdapter["updateBookmark"]>[1]);
     case "createCalendarEvent":
-      return adapter.createCalendarEvent(args[0] as ImportDestination | undefined, args[1] as string | undefined, args[2] as Parameters<ShellAdapter["createCalendarEvent"]>[2]);
+      return adapter.createCalendarEvent(
+        args[0] as ImportDestination | undefined,
+        args[1] as string | undefined,
+        args[2] as Parameters<ShellAdapter["createCalendarEvent"]>[2],
+      );
     case "updateCalendarEvent":
-      return adapter.updateCalendarEvent(args[0] as string, args[1] as Parameters<ShellAdapter["updateCalendarEvent"]>[1]);
+      return adapter.updateCalendarEvent(
+        args[0] as string,
+        args[1] as Parameters<ShellAdapter["updateCalendarEvent"]>[1],
+      );
     case "archiveCalendarEvent":
       return adapter.archiveCalendarEvent(args[0] as string);
     case "deleteCalendarEvent":
       return adapter.deleteCalendarEvent(args[0] as string);
     case "linkResource":
-      return adapter.linkResource(args[0] as string, args[1] as string | undefined, args[2] as ImportDestination | undefined);
+      return adapter.linkResource(
+        args[0] as string,
+        args[1] as string | undefined,
+        args[2] as ImportDestination | undefined,
+      );
     case "linkFileFromPicker":
       return adapter.linkFileFromPicker(args[0] as ImportDestination | undefined);
     case "linkDirectoryFromPicker":
@@ -529,9 +717,17 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "syncLinkedResources":
       return adapter.syncLinkedResources();
     case "importContent":
-      return adapter.importContent(args[0] as string, args[1] as string | undefined, args[2] as ImportDestination | undefined);
+      return adapter.importContent(
+        args[0] as string,
+        args[1] as string | undefined,
+        args[2] as ImportDestination | undefined,
+      );
     case "importFile":
-      return adapter.importFile(args[0] as string, args[1] as string | undefined, args[2] as ImportDestination | undefined);
+      return adapter.importFile(
+        args[0] as string,
+        args[1] as string | undefined,
+        args[2] as ImportDestination | undefined,
+      );
     case "importDirectory":
       return adapter.importDirectory(args[0] as string, args[1] as ImportDestination | undefined);
     case "importFileFromPicker":
@@ -579,7 +775,10 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "removeWorkspaceReference":
       return adapter.removeWorkspaceReference(args[0] as string, args[1] as string);
     case "updateResourceMetadata":
-      return adapter.updateResourceMetadata(args[0] as string, args[1] as Parameters<ShellAdapter["updateResourceMetadata"]>[1]);
+      return adapter.updateResourceMetadata(
+        args[0] as string,
+        args[1] as Parameters<ShellAdapter["updateResourceMetadata"]>[1],
+      );
     case "createRelationship":
       return adapter.createRelationship(
         args[0] as string,
@@ -589,7 +788,11 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
         args[4] as Parameters<ShellAdapter["createRelationship"]>[4],
       );
     case "removeRelationship":
-      return adapter.removeRelationship(args[0] as string, args[1] as Parameters<ShellAdapter["removeRelationship"]>[1], args[2] as string);
+      return adapter.removeRelationship(
+        args[0] as string,
+        args[1] as Parameters<ShellAdapter["removeRelationship"]>[1],
+        args[2] as string,
+      );
     case "createNotification":
       return adapter.createNotification(args[0] as Parameters<ShellAdapter["createNotification"]>[0]);
     case "markNotificationRead":
@@ -619,7 +822,15 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "pinWorkspace":
       return adapter.pinWorkspace(args[0] as string, args[1] as boolean);
     case "updateWorkspaceLaunchSet":
-      return adapter.updateWorkspaceLaunchSet(args[0] as string, args[1] as Parameters<ShellAdapter["updateWorkspaceLaunchSet"]>[1]);
+      return adapter.updateWorkspaceLaunchSet(
+        args[0] as string,
+        args[1] as Parameters<ShellAdapter["updateWorkspaceLaunchSet"]>[1],
+      );
+    case "updateWorkspaceSettings":
+      return adapter.updateWorkspaceSettings(
+        args[0] as string,
+        args[1] as Parameters<ShellAdapter["updateWorkspaceSettings"]>[1],
+      );
     case "createProfile":
       return adapter.createProfile(args[0] as string, args[1] as Parameters<ShellAdapter["createProfile"]>[1]);
     case "openProfile":
@@ -663,7 +874,11 @@ async function invokeShellMethod(adapter: ShellAdapter, method: keyof ShellAdapt
     case "setDefaultApplication":
       return adapter.setDefaultApplication(args[0] as string, args[1] as boolean | undefined);
     case "setWorkspacePreferredApplication":
-      return adapter.setWorkspacePreferredApplication(args[0] as string, args[1] as string, args[2] as boolean | undefined);
+      return adapter.setWorkspacePreferredApplication(
+        args[0] as string,
+        args[1] as string,
+        args[2] as boolean | undefined,
+      );
     case "selectResource":
       return adapter.selectResource(args[0] as string | undefined);
     case "getPlatform":

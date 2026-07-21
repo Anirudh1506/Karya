@@ -1,11 +1,19 @@
 import type { WorkspaceLayout } from "@karya/domain";
-import type { EntityId, Workspace, WorkspaceLaunchSet, WorkspaceReference } from "@karya/types";
+import type {
+  EntityId,
+  Workspace,
+  WorkspaceLaunchSet,
+  WorkspaceReference,
+  WorkspaceSettingsUpdate,
+} from "@karya/types";
 
 export interface CreateWorkspaceRequest {
   name: string;
   profileId: EntityId;
   owner?: EntityId;
   description?: string;
+  color?: string;
+  icon?: string;
   templateId?: EntityId;
 }
 
@@ -31,5 +39,7 @@ export interface WorkspaceService {
   removeResourceReference(workspaceId: EntityId, resourceId: EntityId): Promise<Workspace>;
   setPreferredApplication(workspaceId: EntityId, applicationId: EntityId, preferred?: boolean): Promise<Workspace>;
   updateLaunchSet(workspaceId: EntityId, launchSet: WorkspaceLaunchSet | undefined): Promise<Workspace>;
+  updateSettings(workspaceId: EntityId, update: WorkspaceSettingsUpdate): Promise<Workspace>;
   updateLayout(workspaceId: EntityId, layout: Partial<WorkspaceLayout>): Promise<Workspace>;
+  applyReplica(workspace: Workspace): Promise<Workspace>;
 }

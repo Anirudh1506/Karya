@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Karya",
+    "slug": "karya-mobile",
+    "version": "0.1.0",
+    "platforms": ["ios", "android"],
+    "icon": "../shell/build/icon.png",
+    "orientation": "default",
+    "scheme": "karya",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.karya.mobile"
+    },
+    "android": {
+      "package": "com.karya.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F7F5"
+      }
+    },
+    "plugins": ["expo-dev-client", "./plugins/with-ios-space-safe-scripts"]
+  }
+}

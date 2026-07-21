@@ -1,4 +1,4 @@
-import { DomainRuleViolation, Identifier, Label, Timestamp } from "../common";
+import { Color, DomainRuleViolation, Identifier, Label, Timestamp } from "../common";
 import type {
   ApplicationId,
   CreateWorkspaceRequest,
@@ -9,8 +9,16 @@ import type {
   WorkspaceLaunchSet,
   WorkspaceLifecycle,
   WorkspaceProps,
+  WorkspaceSettings,
 } from "./types";
-import { cloneLaunchSet, cloneSession, createSession, createWorkspaceLayout, normalizeProps } from "./utils";
+import {
+  cloneLaunchSet,
+  cloneSession,
+  cloneWorkspaceSettings,
+  createSession,
+  createWorkspaceLayout,
+  normalizeProps,
+} from "./utils";
 
 export class Workspace {
   private readonly events: WorkspaceDomainEvent[] = [];
@@ -40,6 +48,8 @@ export class Workspace {
       metadata: {
         name: Label.from(request.name).value,
         description: request.description?.trim() || undefined,
+        color: request.color ? Color.from(request.color) : undefined,
+        icon: request.icon?.trim() || undefined,
         createdAt: occurredAt,
         updatedAt: occurredAt,
         createdBy: actorId,
@@ -224,9 +234,11 @@ export class Workspace {
     this.props = {
       ...this.props,
       activeSession,
-      preservedSession: activeSession ? this.props.preservedSession : this.props.preservedSession
-        ? { ...this.props.preservedSession, layout: nextLayout }
-        : undefined,
+      preservedSession: activeSession
+        ? this.props.preservedSession
+        : this.props.preservedSession
+          ? { ...this.props.preservedSession, layout: nextLayout }
+          : undefined,
       updatedAt: occurredAt,
       metadata: { ...this.props.metadata, updatedAt: occurredAt },
     };
@@ -243,6 +255,34 @@ export class Workspace {
       metadata: { ...this.props.metadata, updatedAt: occurredAt },
     };
     this.record("WorkspaceLaunchSetUpdated", { workspaceId: this.props.id }, occurredAt);
+    return this;
+  }
+
+  updateSettings(
+    update: { name?: string; description?: string; icon?: string; color?: string; settings?: WorkspaceSettings },
+    occurredAt: Timestamp,
+    actorId?: UserId,
+  ): Workspace {
+    this.assertMutable("update settings");
+    const nextName = update.name === undefined ? this.props.name : Label.from(update.name).value;
+    this.props = {
+      ...this.props,
+      name: nextName,
+      settings: update.settings ? cloneWorkspaceSettings(update.settings) : this.props.settings,
+      metadata: {
+        ...this.props.metadata,
+        name: nextName,
+        description:
+          update.description === undefined ? this.props.metadata.description : update.description.trim() || undefined,
+        icon: update.icon === undefined ? this.props.metadata.icon : update.icon.trim() || undefined,
+        color:
+          update.color === undefined ? this.props.metadata.color : update.color ? Color.from(update.color) : undefined,
+        updatedAt: occurredAt,
+        updatedBy: actorId ?? this.props.metadata.updatedBy,
+      },
+      updatedAt: occurredAt,
+    };
+    this.record("WorkspaceSettingsUpdated", { workspaceId: this.props.id }, occurredAt);
     return this;
   }
 
@@ -285,6 +325,7 @@ export class Workspace {
       resourceRefs: [...this.props.resourceRefs],
       pinnedApplicationIds: [...this.props.pinnedApplicationIds],
       launchSet: this.props.launchSet ? cloneLaunchSet(this.props.launchSet) : undefined,
+      settings: this.props.settings ? cloneWorkspaceSettings(this.props.settings) : undefined,
       activeSession: this.props.activeSession ? cloneSession(this.props.activeSession) : undefined,
       preservedSession: this.props.preservedSession ? cloneSession(this.props.preservedSession) : undefined,
       permissions: {

@@ -1,8 +1,31 @@
 import type { KernelSnapshot, StateEngine } from "@karya/state-engine";
-import type { CalendarEvent, ContinuitySession, EntityId, ImportDestination, ImportJob, InstalledApplication, JobId, KaryaNotification, NotificationCategory, NotificationPriority, Profile, RelationshipObjectType, RelationshipType, ReminderSchedule, Resource, SearchResult, Workspace, WorkspaceLaunchSet } from "@karya/types";
+import type {
+  CalendarEvent,
+  ContinuitySession,
+  EntityId,
+  ImportDestination,
+  ImportJob,
+  InstalledApplication,
+  JobId,
+  KaryaActivity,
+  KaryaNotification,
+  NotificationCategory,
+  NotificationPriority,
+  Profile,
+  RelationshipObjectType,
+  RelationshipType,
+  ReminderSchedule,
+  Resource,
+  SearchResult,
+  Workspace,
+  WorkspaceLaunchSet,
+  WorkspaceSettingsUpdate,
+  AccountMetadataExport,
+} from "@karya/types";
 import type { Page, ResourceQuery, ResourceView, WorkspaceQuery, WorkspaceView } from "@karya/query-service";
 import type { CommandBus } from "./command-bus";
 import type { BookmarkUpdatePatch, CalendarEventUpdatePatch, ShellApi, TaskUpdatePatch } from "./contracts";
+import type { AccountEngine } from "@karya/account-service";
 
 export class KernelShellApi implements ShellApi {
   private initialized = false;
@@ -10,7 +33,36 @@ export class KernelShellApi implements ShellApi {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly stateEngine: StateEngine,
+    private readonly accountService: AccountEngine,
   ) {}
+
+  currentAccount() {
+    return this.accountService.current();
+  }
+  renameAccount(displayName: string) {
+    return this.accountService.rename(displayName);
+  }
+  trustedDevices() {
+    return this.accountService.trustedDevices();
+  }
+  currentDevice() {
+    return this.accountService.currentDevice();
+  }
+  renameDevice(deviceId: EntityId, name: string) {
+    return this.accountService.renameDevice(deviceId, name);
+  }
+  removeDevice(deviceId: EntityId) {
+    return this.accountService.unregisterDevice(deviceId);
+  }
+  replicaMembership() {
+    return this.accountService.replicaMembership();
+  }
+  exportAccountMetadata() {
+    return this.accountService.exportMetadata();
+  }
+  importAccountMetadata(metadata: AccountMetadataExport) {
+    return this.accountService.importMetadata(metadata);
+  }
 
   async boot(): Promise<void> {
     if (!this.initialized) {
@@ -25,6 +77,10 @@ export class KernelShellApi implements ShellApi {
 
   subscribe(listener: (snapshot: KernelSnapshot) => void): () => void {
     return this.stateEngine.subscribe(listener);
+  }
+
+  getSnapshotSync(): KernelSnapshot {
+    return this.stateEngine.getSnapshot();
   }
 
   async getSnapshot(): Promise<KernelSnapshot> {
@@ -51,6 +107,124 @@ export class KernelShellApi implements ShellApi {
     return this.commandBus.getContext().registry.resolve("queryService").recentResources(limit);
   }
 
+  recentActivities(limit?: number): Promise<KaryaActivity[]> {
+    return this.commandBus.getContext().registry.resolve("activityService").recent(limit);
+  }
+
+  activitiesByProfile(profileId: EntityId, limit?: number): Promise<KaryaActivity[]> {
+    return this.commandBus.getContext().registry.resolve("activityService").byProfile(profileId, limit);
+  }
+
+  activitiesByWorkspace(workspaceId: EntityId, limit?: number): Promise<KaryaActivity[]> {
+    return this.commandBus.getContext().registry.resolve("activityService").byWorkspace(workspaceId, limit);
+  }
+
+  activitiesByResource(resourceId: EntityId, limit?: number): Promise<KaryaActivity[]> {
+    return this.commandBus.getContext().registry.resolve("activityService").byResource(resourceId, limit);
+  }
+
+  activitiesByEventType(eventType: string, limit?: number): Promise<KaryaActivity[]> {
+    return this.commandBus.getContext().registry.resolve("activityService").byEventType(eventType, limit);
+  }
+
+  latestActivity(): Promise<KaryaActivity | undefined> {
+    return this.commandBus.getContext().registry.resolve("activityService").latest();
+  }
+
+  async openActivity(activityId: EntityId): Promise<void> {
+    const activity = await this.commandBus.getContext().registry.resolve("activityService").get(activityId);
+    if (!activity) throw new Error(`Activity not found: ${activityId}`);
+    if (activity.object.type === "resource") {
+      const resource = await this.commandBus
+        .getContext()
+        .registry.resolve("resourceService")
+        .getResource(activity.object.id);
+      if (!resource) throw new Error(`Resource not found: ${activity.object.id}`);
+      await this.switchProfile(resource.profileId);
+      const workspaceId = resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
+      if (workspaceId) await this.openWorkspace(workspaceId);
+      await this.openResource(resource.id);
+    } else if (activity.object.type === "workspace") {
+      if (activity.profileId) await this.switchProfile(activity.profileId);
+      await this.openWorkspace(activity.object.id);
+    } else if (activity.object.type === "profile") {
+      await this.switchProfile(activity.object.id);
+    }
+  }
+
+  unreadNotifications() {
+    return this.commandBus.getContext().registry.resolve("notificationService").unread();
+  }
+  recentNotifications(limit?: number) {
+    return this.commandBus.getContext().registry.resolve("notificationService").recent(limit);
+  }
+  notificationsByProfile(profileId: EntityId, limit?: number) {
+    return this.commandBus.getContext().registry.resolve("notificationService").byProfile(profileId, limit);
+  }
+  notificationsByWorkspace(workspaceId: EntityId, limit?: number) {
+    return this.commandBus.getContext().registry.resolve("notificationService").byWorkspace(workspaceId, limit);
+  }
+  notificationCount() {
+    return this.commandBus.getContext().registry.resolve("notificationService").count();
+  }
+  latestNotification() {
+    return this.commandBus.getContext().registry.resolve("notificationService").latest();
+  }
+  markAllNotificationsRead() {
+    return this.commandBus.getContext().registry.resolve("notificationService").markAllRead();
+  }
+  dismissNotification(notificationId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("notificationService").dismiss(notificationId);
+  }
+  async openNotification(notificationId: EntityId): Promise<void> {
+    const notification = await this.commandBus.getContext().registry.resolve("notificationService").get(notificationId);
+    if (!notification) throw new Error(`Notification not found: ${notificationId}`);
+    await this.markNotificationRead(notificationId);
+    if (notification.resourceId) {
+      const resource = await this.commandBus
+        .getContext()
+        .registry.resolve("resourceService")
+        .getResource(notification.resourceId);
+      if (!resource) throw new Error(`Resource not found: ${notification.resourceId}`);
+      await this.switchProfile(resource.profileId);
+      const workspaceId = resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
+      if (workspaceId) await this.openWorkspace(workspaceId);
+      await this.openResource(resource.id);
+    } else if (notification.workspaceId) {
+      if (notification.profileId) await this.switchProfile(notification.profileId);
+      const workspace = (await this.commandBus.getContext().registry.resolve("workspaceService").listWorkspaces()).find(
+        (candidate) => candidate.id === notification.workspaceId,
+      );
+      if (workspace && workspace.lifecycleState !== "archived" && workspace.lifecycleState !== "deleted") {
+        await this.openWorkspace(notification.workspaceId);
+      }
+    } else if (notification.profileId) await this.switchProfile(notification.profileId);
+  }
+
+  async beginCapture(): Promise<import("@karya/types").CaptureSession> {
+    return this.commandBus.execute({
+      id: crypto.randomUUID(),
+      type: "BeginCaptureCommand",
+      payload: { kind: "note" },
+    });
+  }
+
+  async completeCapture(captureId: EntityId, name: string): Promise<Resource> {
+    return this.commandBus.execute({
+      id: crypto.randomUUID(),
+      type: "CompleteCaptureCommand",
+      payload: { captureId, name },
+    });
+  }
+
+  async cancelCapture(captureId: EntityId): Promise<void> {
+    await this.commandBus.execute({
+      id: crypto.randomUUID(),
+      type: "CancelCaptureCommand",
+      payload: { captureId },
+    });
+  }
+
   async createResource(destination?: ImportDestination): Promise<Resource> {
     return this.commandBus.execute<Resource>({
       id: crypto.randomUUID(),
@@ -68,14 +242,85 @@ export class KernelShellApi implements ShellApi {
   }
 
   async updateNoteContent(resourceId: EntityId, content: string): Promise<Resource> {
-    return this.commandBus.execute<Resource>({
-      id: crypto.randomUUID(),
-      type: "UpdateNoteContentCommand",
-      payload: { resourceId, content },
-    });
+    const editing = this.commandBus.getContext().registry.resolve("editingService");
+    const { session } = await editing.open(resourceId);
+    await editing.change(session.id, content);
+    await editing.flush(session.id);
+    const resource = await this.commandBus.getContext().registry.resolve("resourceService").getResource(resourceId);
+    if (!resource) throw new Error(`Resource not found: ${resourceId}`);
+    return resource;
   }
 
-  async createTask(destination?: ImportDestination, title?: string, options: Omit<TaskUpdatePatch, "title"> = {}): Promise<Resource> {
+  openEditSession(resourceId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").open(resourceId);
+  }
+  updateEditContent(sessionId: EntityId, content: string, selection?: import("@karya/types").EditSelection) {
+    return this.commandBus.getContext().registry.resolve("editingService").change(sessionId, content, selection);
+  }
+  flushEditSession(sessionId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").flush(sessionId);
+  }
+  closeEditSession(sessionId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").close(sessionId);
+  }
+  getEditableContent(resourceId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").getContent(resourceId);
+  }
+  getEditSession(sessionId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").getSession(sessionId);
+  }
+  listEditCheckpoints(resourceId: EntityId) {
+    return this.commandBus.getContext().registry.resolve("editingService").listCheckpoints(resourceId);
+  }
+  subscribeToEditSessions(listener: (session: import("@karya/types").EditSession) => void) {
+    return this.commandBus.getContext().registry.resolve("editingService").subscribe(listener);
+  }
+
+  getSyncStatus() {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").status();
+  }
+  pendingSyncOperations() {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").pending();
+  }
+  acknowledgedSyncOperations() {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").acknowledged();
+  }
+  acknowledgeSyncOperations(operationIds: readonly EntityId[]) {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").acknowledge(operationIds);
+  }
+  replaySyncOperations(operations?: readonly import("@karya/types").SyncOperation[]) {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").replay(operations);
+  }
+  listSyncConflicts() {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").conflicts();
+  }
+  subscribeToSyncStatus(listener: () => void) {
+    return this.commandBus.getContext().registry.resolve("synchronizationService").subscribe(listener);
+  }
+  getTransportStatus() {
+    return this.commandBus.getContext().registry.resolve("transportService").status();
+  }
+  connectTransport() {
+    return this.commandBus.getContext().registry.resolve("transportService").connect();
+  }
+  disconnectTransport() {
+    return this.commandBus.getContext().registry.resolve("transportService").disconnect();
+  }
+  reconnectTransport() {
+    return this.commandBus.getContext().registry.resolve("transportService").reconnect();
+  }
+  synchronizeTransport() {
+    return this.commandBus.getContext().registry.resolve("transportService").synchronize();
+  }
+  subscribeToTransportStatus(listener: () => void) {
+    return this.commandBus.getContext().registry.resolve("transportService").subscribe(listener);
+  }
+
+  async createTask(
+    destination?: ImportDestination,
+    title?: string,
+    options: Omit<TaskUpdatePatch, "title"> = {},
+  ): Promise<Resource> {
     return this.commandBus.execute<Resource>({
       id: crypto.randomUUID(),
       type: "CreateTaskCommand",
@@ -107,7 +352,11 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async createBookmark(destination: ImportDestination | undefined, url: string, options: Omit<BookmarkUpdatePatch, "url"> = {}): Promise<Resource> {
+  async createBookmark(
+    destination: ImportDestination | undefined,
+    url: string,
+    options: Omit<BookmarkUpdatePatch, "url"> = {},
+  ): Promise<Resource> {
     return this.commandBus.execute<Resource>({
       id: crypto.randomUUID(),
       type: "CreateBookmarkCommand",
@@ -123,7 +372,11 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async createCalendarEvent(destination: ImportDestination | undefined, title?: string, options: Omit<CalendarEventUpdatePatch, "title"> = {}): Promise<CalendarEvent> {
+  async createCalendarEvent(
+    destination: ImportDestination | undefined,
+    title?: string,
+    options: Omit<CalendarEventUpdatePatch, "title"> = {},
+  ): Promise<CalendarEvent> {
     return this.commandBus.execute<CalendarEvent>({
       id: crypto.randomUUID(),
       type: "CreateCalendarEventCommand",
@@ -231,7 +484,11 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async openResourceWithApplication(resourceId: EntityId, applicationId: EntityId, workspaceId?: EntityId): Promise<Resource> {
+  async openResourceWithApplication(
+    resourceId: EntityId,
+    applicationId: EntityId,
+    workspaceId?: EntityId,
+  ): Promise<Resource> {
     return this.commandBus.execute<Resource>({
       id: crypto.randomUUID(),
       type: "OpenResourceWithApplicationCommand",
@@ -351,7 +608,13 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async createRelationship(sourceId: EntityId, sourceType: RelationshipObjectType, targetId: EntityId, targetType: RelationshipObjectType, relationshipType: RelationshipType): Promise<void> {
+  async createRelationship(
+    sourceId: EntityId,
+    sourceType: RelationshipObjectType,
+    targetId: EntityId,
+    targetType: RelationshipObjectType,
+    relationshipType: RelationshipType,
+  ): Promise<void> {
     await this.commandBus.execute<void>({
       id: crypto.randomUUID(),
       type: "CreateRelationshipCommand",
@@ -359,7 +622,11 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async removeRelationship(sourceId: EntityId, sourceType: RelationshipObjectType, relationshipId: EntityId): Promise<void> {
+  async removeRelationship(
+    sourceId: EntityId,
+    sourceType: RelationshipObjectType,
+    relationshipId: EntityId,
+  ): Promise<void> {
     await this.commandBus.execute<void>({
       id: crypto.randomUUID(),
       type: "RemoveRelationshipCommand",
@@ -367,7 +634,15 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async createNotification(input: { title: string; description?: string; category: NotificationCategory; source: string; workspaceId?: EntityId; profileId?: EntityId; priority?: NotificationPriority }): Promise<KaryaNotification> {
+  async createNotification(input: {
+    title: string;
+    description?: string;
+    category: NotificationCategory;
+    source: string;
+    workspaceId?: EntityId;
+    profileId?: EntityId;
+    priority?: NotificationPriority;
+  }): Promise<KaryaNotification> {
     return this.commandBus.execute<KaryaNotification>({
       id: crypto.randomUUID(),
       type: "CreateNotificationCommand",
@@ -399,7 +674,15 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async scheduleReminder(input: { title: string; description?: string; category: NotificationCategory; source: string; workspaceId?: EntityId; profileId?: EntityId; remindAt: string }): Promise<ReminderSchedule> {
+  async scheduleReminder(input: {
+    title: string;
+    description?: string;
+    category: NotificationCategory;
+    source: string;
+    workspaceId?: EntityId;
+    profileId?: EntityId;
+    remindAt: string;
+  }): Promise<ReminderSchedule> {
     return this.commandBus.execute<ReminderSchedule>({
       id: crypto.randomUUID(),
       type: "ScheduleReminderCommand",
@@ -407,11 +690,16 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async createWorkspace(name: string, description?: string, templateId?: EntityId): Promise<Workspace> {
+  async createWorkspace(
+    name: string,
+    description?: string,
+    templateId?: EntityId,
+    appearance: { color?: string; icon?: string } = {},
+  ): Promise<Workspace> {
     return this.commandBus.execute<Workspace>({
       id: crypto.randomUUID(),
       type: "CreateWorkspaceCommand",
-      payload: { name, description, templateId },
+      payload: { name, description, templateId, ...appearance },
     });
   }
 
@@ -479,6 +767,14 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
+  async updateWorkspaceSettings(workspaceId: EntityId, update: WorkspaceSettingsUpdate): Promise<Workspace> {
+    return this.commandBus.execute<Workspace>({
+      id: crypto.randomUUID(),
+      type: "UpdateWorkspaceSettingsCommand",
+      payload: { workspaceId, update },
+    });
+  }
+
   async createProfile(
     name: string,
     options: { description?: string; icon?: string; accentColor?: string; template?: Profile["template"] } = {},
@@ -516,7 +812,15 @@ export class KernelShellApi implements ShellApi {
 
   async updateProfile(
     profileId: EntityId,
-    options: { name?: string; description?: string; icon?: string; accentColor?: string; defaultSpaceId?: EntityId; spaceIds?: EntityId[]; preferences?: Profile["preferences"] },
+    options: {
+      name?: string;
+      description?: string;
+      icon?: string;
+      accentColor?: string;
+      defaultSpaceId?: EntityId;
+      spaceIds?: EntityId[];
+      preferences?: Profile["preferences"];
+    },
   ): Promise<Profile> {
     return this.commandBus.execute<Profile>({
       id: crypto.randomUUID(),
@@ -579,7 +883,13 @@ export class KernelShellApi implements ShellApi {
 
   async launchApplication(
     applicationId: EntityId,
-    options: { launchArguments?: string[]; workingDirectory?: string; resourceIds?: EntityId[]; workspaceId?: EntityId; profileId?: EntityId } = {},
+    options: {
+      launchArguments?: string[];
+      workingDirectory?: string;
+      resourceIds?: EntityId[];
+      workspaceId?: EntityId;
+      profileId?: EntityId;
+    } = {},
   ): Promise<InstalledApplication> {
     return this.commandBus.execute<InstalledApplication>({
       id: crypto.randomUUID(),
@@ -644,7 +954,11 @@ export class KernelShellApi implements ShellApi {
     });
   }
 
-  async setWorkspacePreferredApplication(workspaceId: EntityId, applicationId: EntityId, preferred?: boolean): Promise<Workspace> {
+  async setWorkspacePreferredApplication(
+    workspaceId: EntityId,
+    applicationId: EntityId,
+    preferred?: boolean,
+  ): Promise<Workspace> {
     return this.commandBus.execute<Workspace>({
       id: crypto.randomUUID(),
       type: "SetWorkspacePreferredApplicationCommand",
@@ -661,10 +975,42 @@ export class KernelShellApi implements ShellApi {
   }
 
   async search(term: string): Promise<SearchResult[]> {
-    const context = this.commandBus.getContext();
-    const results = await context.registry.resolve("queryService").search(term);
-    await context.publish("SearchCompleted", { query: term, results });
-    return results;
+    return this.commandBus.execute<SearchResult[]>({
+      id: crypto.randomUUID(),
+      type: "SearchCommand",
+      payload: { term, types: ["profile", "workspace", "resource"] },
+    });
+  }
+
+  async recentSearches(): Promise<Array<{ query: string; searchedAt: string }>> {
+    return (
+      (await this.commandBus.getContext().registry.resolve("continuityService").getCurrentSession()).recentSearches ??
+      []
+    );
+  }
+
+  async recordSearch(term: string): Promise<void> {
+    await this.commandBus.getContext().registry.resolve("continuityService").recordSearch(term);
+  }
+
+  async clearRecentSearches(): Promise<void> {
+    await this.commandBus.getContext().registry.resolve("continuityService").clearRecentSearches();
+  }
+
+  async openSearchResult(result: SearchResult, query?: string): Promise<void> {
+    const { document } = result;
+    if (document.type === "profile") {
+      await this.switchProfile(document.sourceId);
+    } else if (document.type === "workspace") {
+      if (document.profileId) await this.switchProfile(document.profileId);
+      await this.openWorkspace(document.sourceId);
+    } else if (document.type === "resource") {
+      if (document.profileId) await this.switchProfile(document.profileId);
+      const workspaceId = document.workspaceIds?.[0];
+      if (workspaceId) await this.openWorkspace(workspaceId);
+      await this.openResource(document.sourceId);
+    }
+    if (query) await this.recordSearch(query);
   }
 
   async selectResource(resourceId?: EntityId): Promise<void> {

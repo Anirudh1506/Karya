@@ -1,5 +1,21 @@
 import type { EntityId, ISODateString } from "./common";
 
+export interface ContinueWorkingResourceItem {
+  kind: "resource";
+  resourceId: EntityId;
+  resourceName: string;
+  resourceType: string;
+  workspaceId: EntityId;
+  workspaceName: string;
+  profileId: EntityId;
+  profileName: string;
+  lastOpened?: ISODateString;
+  lastModified: ISODateString;
+  resumeTimestamp: ISODateString;
+}
+
+export type ContinueWorkingItem = ContinueWorkingResourceItem;
+
 export interface ResumeContext {
   profileId: EntityId;
   workspaceId?: EntityId;
@@ -27,7 +43,13 @@ export interface WorkspaceNavigationContext {
   workspaceId: EntityId;
   folderId?: EntityId;
   selectedResourceId?: EntityId;
-  breadcrumbs?: Array<{ id: EntityId; label: string; profileId?: EntityId; resourceId?: EntityId; workspaceId?: EntityId }>;
+  breadcrumbs?: Array<{
+    id: EntityId;
+    label: string;
+    profileId?: EntityId;
+    resourceId?: EntityId;
+    workspaceId?: EntityId;
+  }>;
   scrollTop?: number;
   capturedAt: ISODateString;
 }
@@ -82,6 +104,7 @@ export interface ContinuitySession {
   activeWorkspaceId?: EntityId;
   recentResourceIds: EntityId[];
   recentApplicationIds?: EntityId[];
+  recentSearches?: Array<{ query: string; searchedAt: ISODateString }>;
   workspaceSessions?: Record<EntityId, ContinuityWorkspaceSession>;
   interruptedSession?: {
     workspaceId: EntityId;

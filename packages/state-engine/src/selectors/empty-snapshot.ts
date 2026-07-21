@@ -33,6 +33,7 @@ export function createEmptySnapshot(): KernelSnapshot {
     resources: {
       all: [],
       recent: [],
+      recentModifiedByWorkspace: {},
       topLevel: [],
       folders: [],
       childrenByFolder: {},
@@ -68,7 +69,14 @@ export function createEmptySnapshot(): KernelSnapshot {
       suggestions: [],
     },
     applications: deriveApplications([]),
-    continuity: { recentSessions: [], continueWorkingByWorkspace: {}, activityByWorkspace: {}, workspaceInsightsByWorkspace: {}, resumeQueue: [] },
+    continuity: {
+      continueWorking: [],
+      recentSessions: [],
+      continueWorkingByWorkspace: {},
+      activityByWorkspace: {},
+      workspaceInsightsByWorkspace: {},
+      resumeQueue: [],
+    },
     activity: deriveActivity([]),
     notifications: deriveNotifications([]),
     settings: { all: [], byId: {} },

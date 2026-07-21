@@ -1,13 +1,9 @@
 import type { FileSystemMetadata } from "@karya/platform";
-import type { Resource } from "@karya/types";
-import { dirname } from "node:path";
+import { parentPath, type Resource } from "@karya/types";
 import type { CommandContext } from "./resource-context";
 import { getResourcePath, markResourceHealth, readStringAttribute, registryUpdateMetadata } from "./resource-context";
 
-export async function syncLinkedResource(
-  resource: Resource,
-  context: CommandContext,
-): Promise<Resource> {
+export async function syncLinkedResource(resource: Resource, context: CommandContext): Promise<Resource> {
   if (!isLinkedResource(resource)) {
     return checkResourceAvailability(resource, context);
   }
@@ -28,9 +24,9 @@ export async function syncLinkedResource(
   const originalDirectory = readStringAttribute(resource, "linkedOriginalDirectory");
   const recovered = fileSystemId
     ? await context.platform?.fileSystem.findByFileSystemId(
-      fileSystemId,
-      [containingDirectory, originalDirectory].filter((value): value is string => Boolean(value)),
-    )
+        fileSystemId,
+        [containingDirectory, originalDirectory].filter((value): value is string => Boolean(value)),
+      )
     : undefined;
 
   if (recovered) {
@@ -66,7 +62,8 @@ export async function updateLinkedResourceFromMetadata(
     updatedAt: new Date().toISOString(),
     attributes: {
       ...createLinkedResourceAttributes(metadata, metadata.path),
-      linkedPreviousPath: health === "moved" ? previousPath : readStringAttribute(resource, "linkedPreviousPath") ?? null,
+      linkedPreviousPath:
+        health === "moved" ? previousPath : (readStringAttribute(resource, "linkedPreviousPath") ?? null),
       resourceHealth: health,
     },
   });
@@ -79,22 +76,25 @@ export async function updateLinkedResourceFromMetadata(
 }
 
 export function isLinkedResource(resource: Resource): boolean {
-  return resource.metadata.attributes?.resourceLocationKind === "local-linked"
-    || resource.tags.includes("linked");
+  return resource.metadata.attributes?.resourceLocationKind === "local-linked" || resource.tags.includes("linked");
 }
 
-export function createLinkedResourceAttributes(metadata: FileSystemMetadata, path: string): NonNullable<Resource["metadata"]["attributes"]> {
+export function createLinkedResourceAttributes(
+  metadata: FileSystemMetadata,
+  path: string,
+): NonNullable<Resource["metadata"]["attributes"]> {
   return {
     contentSourcePath: path,
-    contentContainingDirectory: dirname(path),
+    contentContainingDirectory: parentPath(path),
     contentByteLength: metadata.byteLength,
-    contentMimeType: metadata.mimeType ?? (metadata.kind === "directory" ? "inode/directory" : "application/octet-stream"),
+    contentMimeType:
+      metadata.mimeType ?? (metadata.kind === "directory" ? "inode/directory" : "application/octet-stream"),
     contentOriginalName: metadata.name,
     contentExtension: metadata.extension ?? null,
     folderPath: metadata.kind === "directory" ? path : null,
     linked: true,
     linkedFileSystemId: metadata.fileSystemId ?? null,
-    linkedOriginalDirectory: dirname(path),
+    linkedOriginalDirectory: parentPath(path),
     linkedLastModifiedAt: metadata.modifiedAt ?? null,
     linkedCreatedAt: metadata.createdAt ?? null,
     resourceHealth: "available",

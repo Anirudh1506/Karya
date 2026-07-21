@@ -1,10 +1,8 @@
-import type { Resource } from "@karya/types";
+import { fileNameFromPath, parentPath, type Resource } from "@karya/types";
 import type { CommandBus } from "../../command-bus";
-import { basename, dirname } from "node:path";
 import {
   assertPathAvailable,
   checkResourceAvailability,
-  createIndexedNoteAttributes,
   createLinkedResourceAttributes,
   createNativeBookmark,
   createNativeCalendarEvent,
@@ -28,6 +26,7 @@ import {
   requireResource,
   requireResourcePath,
   resolveImportDestination,
+  requireActiveResourceContext,
   summarizeNote,
   syncLinkedResource,
   updateNativeBookmark,
@@ -36,15 +35,27 @@ import {
 } from "../helpers";
 
 export function registerNativeResourceCommandHandlers(commandBus: CommandBus): void {
-commandBus.register("CreateResourceCommand", async (command, { registry }) => {
-    const destination = await resolveImportDestination(command.payload.destination, { registry });
+  commandBus.register("CreateResourceCommand", async (command, { registry }) => {
+    const active = await requireActiveResourceContext({ registry });
+    if (command.payload.destination?.workspaceId && command.payload.destination.workspaceId !== active.workspace.id) {
+      throw new Error("Resource creation must target the active Workspace");
+    }
+    const destination = {
+      defaultSpace: active.defaultSpace,
+      primaryWorkspaceId: active.workspace.id,
+      profileId: active.ownershipProfileId,
+      workspaceRefs: [active.workspace.id],
+    };
     if (command.payload.resourceType === "note") {
-      return createNativeNote({
-        title: command.payload.displayTitle,
-        content: "",
-        destination,
-        tags: command.payload.tags ?? ["note", "created"],
-      }, { registry });
+      return createNativeNote(
+        {
+          title: command.payload.displayTitle,
+          content: "",
+          destination,
+          tags: command.payload.tags ?? ["note", "created"],
+        },
+        { registry },
+      );
     }
 
     return registry.resolve("resourceService").create({
@@ -60,13 +71,25 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
   });
 
   commandBus.register("CreateNoteCommand", async (command, context) => {
-    const destination = await resolveImportDestination(command.payload.destination, context);
-    return createNativeNote({
-      title: command.payload.title,
-      content: command.payload.content ?? "",
-      destination,
-      tags: ["note", "created"],
-    }, context);
+    const active = await requireActiveResourceContext(context);
+    if (command.payload.destination?.workspaceId && command.payload.destination.workspaceId !== active.workspace.id) {
+      throw new Error("Resource creation must target the active Workspace");
+    }
+    const destination = {
+      defaultSpace: active.defaultSpace,
+      primaryWorkspaceId: active.workspace.id,
+      profileId: active.ownershipProfileId,
+      workspaceRefs: [active.workspace.id],
+    };
+    return createNativeNote(
+      {
+        title: command.payload.title,
+        content: command.payload.content ?? "",
+        destination,
+        tags: ["note", "created"],
+      },
+      context,
+    );
   });
 
   commandBus.register("UpdateNoteContentCommand", async (command, context) => {
@@ -87,24 +110,27 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
 
   commandBus.register("CreateTaskCommand", async (command, context) => {
     const destination = await resolveImportDestination(command.payload.destination, context);
-    return createNativeTask({
-      title: command.payload.title,
-      description: command.payload.description ?? "",
-      checklistItems: command.payload.checklistItems ?? [],
-      checklistCompleted: command.payload.checklistCompleted ?? [],
-      labels: command.payload.labels ?? [],
-      status: command.payload.status ?? "todo",
-      priority: command.payload.priority ?? "none",
-      dueDate: command.payload.dueDate,
-      reminderAt: command.payload.reminderAt,
-      reminderDate: command.payload.reminderDate,
-      reminderTime: command.payload.reminderTime,
-      reminderRepeat: command.payload.reminderRepeat,
-      pinned: command.payload.pinned ?? false,
-      parentTaskId: command.payload.parentTaskId,
-      destination,
-      tags: command.payload.tags ?? ["task", "created"],
-    }, context);
+    return createNativeTask(
+      {
+        title: command.payload.title,
+        description: command.payload.description ?? "",
+        checklistItems: command.payload.checklistItems ?? [],
+        checklistCompleted: command.payload.checklistCompleted ?? [],
+        labels: command.payload.labels ?? [],
+        status: command.payload.status ?? "todo",
+        priority: command.payload.priority ?? "none",
+        dueDate: command.payload.dueDate,
+        reminderAt: command.payload.reminderAt,
+        reminderDate: command.payload.reminderDate,
+        reminderTime: command.payload.reminderTime,
+        reminderRepeat: command.payload.reminderRepeat,
+        pinned: command.payload.pinned ?? false,
+        parentTaskId: command.payload.parentTaskId,
+        destination,
+        tags: command.payload.tags ?? ["task", "created"],
+      },
+      context,
+    );
   });
 
   commandBus.register("UpdateTaskCommand", async (command, context) => {
@@ -135,21 +161,24 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
     const destination = await resolveImportDestination(command.payload.destination, context);
     const normalizedUrl = normalizeBookmarkUrl(command.payload.url);
     const metadata = await context.platform?.web.fetchMetadata(normalizedUrl);
-    return createNativeBookmark({
-      url: metadata?.url ?? normalizedUrl,
-      title: command.payload.title ?? metadata?.title,
-      description: command.payload.description ?? metadata?.description,
-      websiteName: command.payload.websiteName ?? metadata?.siteName,
-      favicon: command.payload.favicon ?? metadata?.favicon,
-      previewImage: command.payload.previewImage ?? metadata?.previewImage,
-      notes: command.payload.notes ?? "",
-      labels: command.payload.labels ?? [],
-      readingStatus: command.payload.readingStatus ?? "unread",
-      favorite: command.payload.favorite ?? false,
-      pinned: command.payload.pinned ?? false,
-      destination,
-      tags: command.payload.tags ?? ["bookmark", "created"],
-    }, context);
+    return createNativeBookmark(
+      {
+        url: metadata?.url ?? normalizedUrl,
+        title: command.payload.title ?? metadata?.title,
+        description: command.payload.description ?? metadata?.description,
+        websiteName: command.payload.websiteName ?? metadata?.siteName,
+        favicon: command.payload.favicon ?? metadata?.favicon,
+        previewImage: command.payload.previewImage ?? metadata?.previewImage,
+        notes: command.payload.notes ?? "",
+        labels: command.payload.labels ?? [],
+        readingStatus: command.payload.readingStatus ?? "unread",
+        favorite: command.payload.favorite ?? false,
+        pinned: command.payload.pinned ?? false,
+        destination,
+        tags: command.payload.tags ?? ["bookmark", "created"],
+      },
+      context,
+    );
   });
 
   commandBus.register("UpdateBookmarkCommand", async (command, context) => {
@@ -162,27 +191,30 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
 
   commandBus.register("CreateCalendarEventCommand", async (command, context) => {
     const destination = await resolveImportDestination(command.payload.destination, context);
-    return createNativeCalendarEvent({
-      title: command.payload.title,
-      description: command.payload.description ?? "",
-      startDate: command.payload.startDate,
-      endDate: command.payload.endDate,
-      startTime: command.payload.startTime,
-      endTime: command.payload.endTime,
-      timeZone: command.payload.timeZone,
-      allDay: command.payload.allDay ?? false,
-      color: command.payload.color,
-      labels: command.payload.labels ?? [],
-      category: command.payload.category ?? "meeting",
-      reminder: command.payload.reminder,
-      recurrence: command.payload.recurrence,
-      repeatUntil: command.payload.repeatUntil,
-      location: command.payload.location,
-      url: command.payload.url,
-      relatedResourceIds: command.payload.relatedResourceIds ?? [],
-      destination,
-      tags: command.payload.tags ?? ["calendar", "event", "created"],
-    }, context);
+    return createNativeCalendarEvent(
+      {
+        title: command.payload.title,
+        description: command.payload.description ?? "",
+        startDate: command.payload.startDate,
+        endDate: command.payload.endDate,
+        startTime: command.payload.startTime,
+        endTime: command.payload.endTime,
+        timeZone: command.payload.timeZone,
+        allDay: command.payload.allDay ?? false,
+        color: command.payload.color,
+        labels: command.payload.labels ?? [],
+        category: command.payload.category ?? "meeting",
+        reminder: command.payload.reminder,
+        recurrence: command.payload.recurrence,
+        repeatUntil: command.payload.repeatUntil,
+        location: command.payload.location,
+        url: command.payload.url,
+        relatedResourceIds: command.payload.relatedResourceIds ?? [],
+        destination,
+        tags: command.payload.tags ?? ["calendar", "event", "created"],
+      },
+      context,
+    );
   });
 
   commandBus.register("UpdateCalendarEventCommand", async (command, context) => {
@@ -209,9 +241,6 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
 
     const destination = await resolveImportDestination(command.payload.destination, context);
     const noteLike = metadata.kind === "file" && isNoteFile(metadata.extension);
-    const linkedNoteContent = noteLike
-      ? await context.platform?.fileSystem.readTextFile(command.payload.path)
-      : undefined;
     const linked = await context.registry.resolve("resourceService").create({
       displayTitle: command.payload.displayTitle ?? metadata.name,
       type: metadata.mimeType ?? (metadata.kind === "directory" ? "inode/directory" : "application/octet-stream"),
@@ -223,20 +252,27 @@ commandBus.register("CreateResourceCommand", async (command, { registry }) => {
       tags: metadata.kind === "directory" ? ["linked", "folder"] : noteLike ? ["linked", "note"] : ["linked"],
       metadata: {
         kind: metadata.kind === "directory" ? "folder" : noteLike ? "note" : "content",
-        description: metadata.kind === "directory" ? "Linked folder on this computer" : noteLike ? "Linked note on this computer" : "Linked file on this computer",
+        description:
+          metadata.kind === "directory"
+            ? "Linked folder on this computer"
+            : noteLike
+              ? "Linked note on this computer"
+              : "Linked file on this computer",
         attributes: {
           ...createLinkedResourceAttributes(metadata, command.payload.path),
-          ...(noteLike ? {
-            noteOrigin: "linked",
-            noteEditableInKarya: false,
-            ...(typeof linkedNoteContent === "string" ? createIndexedNoteAttributes(linkedNoteContent) : {}),
-          } : {}),
+          ...(noteLike
+            ? {
+                noteOrigin: "linked",
+                noteEditableInKarya: false,
+              }
+            : {}),
         },
       },
     });
-    if (metadata.kind === "directory") {
-      await context.publish("FolderImported", { folder: linked });
-    }
+    await context.publish("ResourceReferenced", {
+      resource: linked,
+      workspaceId: destination.primaryWorkspaceId ?? destination.workspaceRefs[0],
+    });
     return linked;
   });
 

@@ -1,12 +1,21 @@
 import type { InstalledApplication } from "@karya/types";
 import type { CommandContext } from "./resource-context";
-import { assertPathAvailable, getResourcePath, markResourceHealth, readStringAttribute, requireResource } from "./resource-context";
+import {
+  assertPathAvailable,
+  getResourcePath,
+  markResourceHealth,
+  readStringAttribute,
+  requireResource,
+} from "./resource-context";
 import { isKaryaBookmark, readTaskString } from "./native-resources";
 import { isLinkedResource, syncLinkedResource } from "./linked-resources";
+import { SYSTEM_DELEGATED_FILE_EXTENSIONS } from "../../constants";
 
 export async function openResourceById(resourceId: string, context: CommandContext) {
   const initialResource = await requireResource(resourceId, context);
-  const resource = isLinkedResource(initialResource) ? await syncLinkedResource(initialResource, context) : initialResource;
+  const resource = isLinkedResource(initialResource)
+    ? await syncLinkedResource(initialResource, context)
+    : initialResource;
   const activeWorkspace = await context.registry.resolve("workspaceService").getActiveWorkspace();
   const workspaceId = activeWorkspace?.id ?? resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
   if (isKaryaBookmark(resource)) {
@@ -27,7 +36,11 @@ export async function openResourceById(resourceId: string, context: CommandConte
     return resource;
   }
   await assertPathAvailable(resource, path, context);
-  const application = await resolvePreferredApplication(resource, workspaceId, context);
+  const extension = readFileExtension(resource)?.toLocaleLowerCase();
+  const delegatesToSystem = SYSTEM_DELEGATED_FILE_EXTENSIONS.includes(
+    extension as (typeof SYSTEM_DELEGATED_FILE_EXTENSIONS)[number],
+  );
+  const application = delegatesToSystem ? undefined : await resolvePreferredApplication(resource, workspaceId, context);
   if (application) {
     await context.registry.resolve("applicationRegistry").launchApplication({
       applicationId: application.metadata.id,
@@ -44,11 +57,19 @@ export async function openResourceById(resourceId: string, context: CommandConte
   return markResourceHealth(resource.id, "available", context);
 }
 
-export async function openResourceWithApplication(resourceId: string, applicationId: string, requestedWorkspaceId: string | undefined, context: CommandContext) {
+export async function openResourceWithApplication(
+  resourceId: string,
+  applicationId: string,
+  requestedWorkspaceId: string | undefined,
+  context: CommandContext,
+) {
   const initialResource = await requireResource(resourceId, context);
-  const resource = isLinkedResource(initialResource) ? await syncLinkedResource(initialResource, context) : initialResource;
+  const resource = isLinkedResource(initialResource)
+    ? await syncLinkedResource(initialResource, context)
+    : initialResource;
   const activeWorkspace = await context.registry.resolve("workspaceService").getActiveWorkspace();
-  const workspaceId = requestedWorkspaceId ?? activeWorkspace?.id ?? resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
+  const workspaceId =
+    requestedWorkspaceId ?? activeWorkspace?.id ?? resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
   const path = getResourcePath(resource);
   if (!path) {
     throw new Error(`Resource does not have a local filesystem location: ${resource.id}`);
@@ -82,7 +103,9 @@ export async function resolvePreferredApplication(
   const orderedIds = [
     ...(workspace?.pinnedApplicationIds ?? []),
     ...(profile?.preferences?.defaultApplicationIds ?? []),
-    ...applications.filter((application) => application.defaultApplication).map((application) => application.metadata.id),
+    ...applications
+      .filter((application) => application.defaultApplication)
+      .map((application) => application.metadata.id),
   ];
 
   for (const applicationId of orderedIds) {
@@ -93,7 +116,10 @@ export async function resolvePreferredApplication(
   return applications.find((application) => applicationSupportsResource(application, resource));
 }
 
-export function applicationSupportsResource(application: InstalledApplication, resource: Awaited<ReturnType<typeof requireResource>>): boolean {
+export function applicationSupportsResource(
+  application: InstalledApplication,
+  resource: Awaited<ReturnType<typeof requireResource>>,
+): boolean {
   const supportedTypes = application.metadata.supportedFileTypes ?? [];
   if (!supportedTypes.length) return false;
   const extension = readFileExtension(resource);
@@ -101,10 +127,12 @@ export function applicationSupportsResource(application: InstalledApplication, r
   const kind = resource.metadata.kind;
   return supportedTypes.some((supportedType: string) => {
     const normalized = supportedType.toLocaleLowerCase();
-    return normalized === mimeType.toLocaleLowerCase()
-      || normalized === kind.toLocaleLowerCase()
-      || Boolean(extension && normalized === extension.toLocaleLowerCase())
-      || Boolean(extension && normalized === `.${extension.toLocaleLowerCase()}`);
+    return (
+      normalized === mimeType.toLocaleLowerCase() ||
+      normalized === kind.toLocaleLowerCase() ||
+      Boolean(extension && normalized === extension.toLocaleLowerCase()) ||
+      Boolean(extension && normalized === `.${extension.toLocaleLowerCase()}`)
+    );
   });
 }
 

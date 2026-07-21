@@ -5,6 +5,7 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 const karyaAliases = {
   "@karya/application-registry": resolve("../../packages/application-registry/src/index.ts"),
   "@karya/activity-service": resolve("../../packages/activity-service/src/index.ts"),
+  "@karya/content-store/node": resolve("../../packages/content-store/src/filesystem-content-store.ts"),
   "@karya/content-store": resolve("../../packages/content-store/src/index.ts"),
   "@karya/command-registry": resolve("../../packages/command-registry/src/index.ts"),
   "@karya/continuity-service": resolve("../../packages/continuity-service/src/index.ts"),
@@ -12,6 +13,7 @@ const karyaAliases = {
   "@karya/domain": resolve("../../packages/domain/src/index.ts"),
   "@karya/event-bus": resolve("../../packages/event-bus/src/index.ts"),
   "@karya/event-service": resolve("../../packages/event-service/src/index.ts"),
+  "@karya/import-service/node": resolve("../../packages/import-service/src/node-import-source-provider.ts"),
   "@karya/import-service": resolve("../../packages/import-service/src/index.ts"),
   "@karya/kernel": resolve("../../packages/kernel/src/index.ts"),
   "@karya/metadata-store": resolve("../../packages/metadata-store/src/index.ts"),
@@ -61,7 +63,7 @@ const bundledWorkspacePackages = [
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
   const build = {
-    minify: isProduction ? "esbuild" as const : false,
+    minify: isProduction ? ("esbuild" as const) : false,
     sourcemap: !isProduction,
     reportCompressedSize: isProduction,
     emptyOutDir: true,

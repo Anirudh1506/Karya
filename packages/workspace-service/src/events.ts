@@ -10,6 +10,7 @@ export async function publishWorkspaceDomainEvent(
   if (event.name === "WorkspaceCreated") {
     await eventBus.publish("WorkspaceCreated", { workspace });
     await eventBus.publish("workspace:created", { workspace });
+    await eventBus.publish("ActiveWorkspaceChanged", { workspaceId: workspace.id });
   } else if (event.name === "WorkspaceOpened") {
     await eventBus.publish("WorkspaceOpened", { workspace, workspaceId: workspace.id });
     await eventBus.publish("workspace:opened", { workspace, workspaceId: workspace.id });
@@ -26,7 +27,6 @@ export async function publishWorkspaceDomainEvent(
   } else if (event.name === "WorkspaceRestored") {
     await eventBus.publish("WorkspaceRestored", { workspace });
     await eventBus.publish("workspace:restored", { workspace, workspaceId: workspace.id });
-    await eventBus.publish("ActiveWorkspaceChanged", { workspaceId: workspace.id });
   } else if (event.name === "WorkspaceDeleted") {
     await eventBus.publish("WorkspaceDeleted", { workspace });
     await eventBus.publish("ActiveWorkspaceChanged", { workspaceId: undefined });
@@ -42,6 +42,10 @@ export async function publishWorkspaceDomainEvent(
       workspace,
       applicationId: event.payload.applicationId.value,
     });
+  } else if (event.name === "WorkspaceLaunchSetUpdated") {
+    await eventBus.publish("WorkspaceLaunchSetUpdated", { workspace });
+  } else if (event.name === "WorkspaceSettingsUpdated") {
+    await eventBus.publish("WorkspaceSettingsUpdated", { workspace });
   }
 
   await eventBus.publish("WorkspaceUpdated", { workspace });

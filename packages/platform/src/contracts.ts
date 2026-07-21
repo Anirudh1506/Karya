@@ -14,6 +14,24 @@ export interface NotificationProvider {
   notify(request: NotificationRequest): Promise<void>;
 }
 
+export interface CameraCapture {
+  uri: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface CameraProvider {
+  isAvailable(): Promise<boolean>;
+  capture(): Promise<CameraCapture | undefined>;
+}
+
+export interface SecureStorageProvider {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
+}
+
 export interface WindowProvider {
   setTitle(title: string): Promise<void>;
   minimize(): Promise<void>;
@@ -74,10 +92,12 @@ export interface ApplicationProvider {
 
 export interface PlatformProviders {
   applications: ApplicationProvider;
+  camera: CameraProvider;
   clipboard: ClipboardProvider;
   downloads: DownloadProvider;
   fileSystem: FileSystemProvider;
   notifications: NotificationProvider;
+  secureStorage: SecureStorageProvider;
   web: WebProvider;
   windows: WindowProvider;
 }

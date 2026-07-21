@@ -106,9 +106,15 @@ export async function updateNativeCalendarEvent(
     tags: patch.tags ?? event.tags,
     metadata: {
       title,
-      description: typeof patch.description === "string"
-        ? (patch.description.trim() || calendarEventSummary(nextStartDate, patch.startTime ?? readTaskString(event, "calendarStartTime"), patch.location ?? readTaskString(event, "calendarLocation")))
-        : event.metadata.description,
+      description:
+        typeof patch.description === "string"
+          ? patch.description.trim() ||
+            calendarEventSummary(
+              nextStartDate,
+              patch.startTime ?? readTaskString(event, "calendarStartTime"),
+              patch.location ?? readTaskString(event, "calendarLocation"),
+            )
+          : event.metadata.description,
       attributes: {
         ...(event.metadata.attributes ?? {}),
         ...createCalendarEventAttributes({
@@ -191,14 +197,12 @@ export function createCalendarEventAttributes(input: {
       input.url,
       input.category,
       ...input.labels,
-    ].filter(Boolean).join(" "),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
 export function calendarEventSummary(startDate: string, startTime?: string, location?: string): string {
-  return [
-    startDate,
-    startTime,
-    location ? `at ${location}` : "",
-  ].filter(Boolean).join(" ");
+  return [startDate, startTime, location ? `at ${location}` : ""].filter(Boolean).join(" ");
 }

@@ -1,20 +1,32 @@
 import type {
   ApplicationProvider,
+  CameraProvider,
   ClipboardProvider,
   DownloadProvider,
   FileSystemProvider,
   NotificationProvider,
   PlatformProviders,
+  SecureStorageProvider,
   WebProvider,
   WindowProvider,
 } from "@karya/platform";
 import type { InstalledApplication } from "@karya/types";
 import { clipboard, dialog, shell as electronShell } from "electron";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { promisify } from "node:util";
+import { MACOS_OPEN_COMMAND, MACOS_PLATFORM, MACOS_TEXT_EDITOR_NAME, TEXT_FILE_EXTENSION } from "./constants";
 import { discoverNativeApplications, launchApplication } from "./services/application-service";
 import { fetchWebMetadata } from "./services/web-metadata";
-import { exists, findFileSystemMetadataById, getFileSystemMetadata, isTextReadableExtension } from "./resources/file-system";
+import {
+  exists,
+  findFileSystemMetadataById,
+  getFileSystemMetadata,
+  isTextReadableExtension,
+} from "./resources/file-system";
+
+const execFileAsync = promisify(execFile);
 
 export class ElectronPlatformProviders implements PlatformProviders {
   private discoveredApplications: InstalledApplication[] = [];
@@ -47,6 +59,15 @@ export class ElectronPlatformProviders implements PlatformProviders {
     openFile: async (applicationId, path) => {
       const application = await this.findApplication(applicationId);
       await launchApplication(application, [path]);
+    },
+  };
+
+  camera: CameraProvider = {
+    async isAvailable() {
+      return false;
+    },
+    async capture() {
+      return undefined;
     },
   };
 
@@ -103,6 +124,15 @@ export class ElectronPlatformProviders implements PlatformProviders {
       }
     },
     async openPath(path) {
+      const metadata = await getFileSystemMetadata(path);
+      if (
+        process.platform === MACOS_PLATFORM &&
+        metadata?.kind === "file" &&
+        metadata.extension?.toLocaleLowerCase() === TEXT_FILE_EXTENSION
+      ) {
+        await execFileAsync(MACOS_OPEN_COMMAND, ["-a", MACOS_TEXT_EDITOR_NAME, path]);
+        return;
+      }
       const error = await electronShell.openPath(path);
       if (error) {
         throw new Error(error);
@@ -121,6 +151,14 @@ export class ElectronPlatformProviders implements PlatformProviders {
 
   notifications: NotificationProvider = {
     async notify() {},
+  };
+
+  secureStorage: SecureStorageProvider = {
+    async get() {
+      return undefined;
+    },
+    async set() {},
+    async remove() {},
   };
 
   windows: WindowProvider = {

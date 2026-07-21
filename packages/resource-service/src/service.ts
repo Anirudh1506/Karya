@@ -12,7 +12,7 @@ import type { EventBus } from "@karya/event-bus";
 import type { EntityId, LifecycleState, Resource } from "@karya/types";
 import type { CreateResourceRequest, ResourceService, UpdateResourceRequest } from "./contracts";
 import { publishResourceDomainEvent } from "./events";
-import { toDomainMetadataPatch, toDto } from "./mappers";
+import { toDomain, toDomainMetadataPatch, toDto } from "./mappers";
 import { InMemoryResourceRepository } from "./repository";
 
 export class InMemoryResourceService implements ResourceService {
@@ -53,22 +53,32 @@ export class InMemoryResourceService implements ResourceService {
     if (request.owner || request.profileId || request.primaryWorkspaceId || request.defaultSpace) {
       const snapshot = aggregate.toSnapshot();
       const workspaceRefs = request.workspaceRefs ?? snapshot.workspaceRefs.map((workspaceId) => workspaceId.value);
-      aggregate.movePlacement({
-        owner: Identifier.from(request.owner ?? snapshot.ownership.owner.value, "OwnerId"),
-        profileId: Identifier.from(request.profileId ?? snapshot.ownership.profileId.value, "ProfileId"),
-        workspaceRefs: workspaceRefs.map((workspaceId) => Identifier.from(workspaceId, "WorkspaceId")),
-        primaryWorkspaceId: request.primaryWorkspaceId
-          ? Identifier.from(request.primaryWorkspaceId, "WorkspaceId")
-          : workspaceRefs[0]
-            ? Identifier.from(workspaceRefs[0], "WorkspaceId")
-            : undefined,
-        defaultSpace: request.defaultSpace ?? snapshot.defaultSpace,
-      }, occurredAt);
+      aggregate.movePlacement(
+        {
+          owner: Identifier.from(request.owner ?? snapshot.ownership.owner.value, "OwnerId"),
+          profileId: Identifier.from(request.profileId ?? snapshot.ownership.profileId.value, "ProfileId"),
+          workspaceRefs: workspaceRefs.map((workspaceId) => Identifier.from(workspaceId, "WorkspaceId")),
+          primaryWorkspaceId: request.primaryWorkspaceId
+            ? Identifier.from(request.primaryWorkspaceId, "WorkspaceId")
+            : workspaceRefs[0]
+              ? Identifier.from(workspaceRefs[0], "WorkspaceId")
+              : undefined,
+          defaultSpace: request.defaultSpace ?? snapshot.defaultSpace,
+        },
+        occurredAt,
+      );
     } else if (request.workspaceRefs) {
       await this.replaceWorkspaceReferences(aggregate, request.workspaceRefs, occurredAt);
     }
 
     return this.saveAndPublish(aggregate);
+  }
+
+  async applyReplica(resource: Resource): Promise<Resource> {
+    await this.repository.save(toDomain(resource));
+    await this.eventBus.publish("ResourceUpdated", { resource });
+    await this.eventBus.publish("resource:updated", { resource });
+    return resource;
   }
 
   async rename(id: EntityId, title: string): Promise<Resource> {
@@ -187,7 +197,11 @@ export class InMemoryResourceService implements ResourceService {
     const occurredAt = Timestamp.from(command.payload.occurredAt);
 
     if (command.type === "RenameResource") {
-      aggregate.rename(command.payload.title, occurredAt, command.payload.actorId ? Identifier.from(command.payload.actorId, "UserId") : undefined);
+      aggregate.rename(
+        command.payload.title,
+        occurredAt,
+        command.payload.actorId ? Identifier.from(command.payload.actorId, "UserId") : undefined,
+      );
     } else if (command.type === "ArchiveResource") {
       aggregate.archive(occurredAt);
     } else if (command.type === "RestoreResource") {
@@ -195,7 +209,11 @@ export class InMemoryResourceService implements ResourceService {
     } else if (command.type === "DeleteResource") {
       aggregate.delete(occurredAt);
     } else if (command.type === "AddWorkspaceReference") {
-      aggregate.addWorkspaceReference(Identifier.from(command.payload.workspaceId, "WorkspaceId"), occurredAt, command.payload.makePrimary);
+      aggregate.addWorkspaceReference(
+        Identifier.from(command.payload.workspaceId, "WorkspaceId"),
+        occurredAt,
+        command.payload.makePrimary,
+      );
     } else if (command.type === "RemoveWorkspaceReference") {
       aggregate.removeWorkspaceReference(Identifier.from(command.payload.workspaceId, "WorkspaceId"), occurredAt);
     } else if (command.type === "UpdateMetadata") {

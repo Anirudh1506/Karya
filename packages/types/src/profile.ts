@@ -19,7 +19,7 @@ export interface Profile {
   accentColor?: string;
   template?: ProfileTemplate;
   lifecycleState?: ProfileLifecycleState;
-  defaultSpaceId: EntityId;
+  defaultSpaceId?: EntityId;
   spaceIds: EntityId[];
   createdAt: ISODateString;
   updatedAt?: ISODateString;

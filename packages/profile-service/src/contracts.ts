@@ -28,6 +28,7 @@ export interface ProfileService {
   delete(id: EntityId): Promise<Profile>;
   switchProfile(id: EntityId): Promise<Profile>;
   listProfiles(): Promise<Profile[]>;
-  getActiveProfile(): Promise<Profile>;
-  activateProfile(id: EntityId): Promise<Profile>;
+  getActiveProfile(): Promise<Profile | undefined>;
+  activateProfile(id: EntityId, restoreWorkspace?: boolean): Promise<Profile>;
+  applyReplica(profile: Profile): Promise<Profile>;
 }

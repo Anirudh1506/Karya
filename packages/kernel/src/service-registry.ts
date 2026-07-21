@@ -37,12 +37,18 @@ export class ServiceRegistry {
 
   snapshot(): KernelServices {
     return {
+      accountService: this.resolve("accountService"),
       activityService: this.resolve("activityService"),
       applicationRegistry: this.resolve("applicationRegistry"),
+      captureService: this.resolve("captureService"),
       commandRegistry: this.resolve("commandRegistry"),
+      continueWorkingService: this.resolve("continueWorkingService"),
       continuityService: this.resolve("continuityService"),
       eventService: this.resolve("eventService"),
       eventBus: this.resolve("eventBus"),
+      editingService: this.resolve("editingService"),
+      synchronizationService: this.resolve("synchronizationService"),
+      transportService: this.resolve("transportService"),
       importService: this.resolve("importService"),
       notificationService: this.resolve("notificationService"),
       profileService: this.resolve("profileService"),

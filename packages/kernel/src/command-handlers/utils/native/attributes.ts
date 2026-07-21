@@ -15,9 +15,7 @@ export function readTaskList(item: MetadataCarrier, key: string): string[] {
 }
 
 export function readTaskBooleanList(item: MetadataCarrier, key: string): boolean[] {
-  return (readTaskString(item, key) ?? "")
-    .split("\n")
-    .map((item) => item === "1" || item === "true");
+  return (readTaskString(item, key) ?? "").split("\n").map((item) => item === "1" || item === "true");
 }
 
 export function readTaskBoolean(item: MetadataCarrier, key: string): boolean {

@@ -10,7 +10,22 @@ export interface PendingPlacement {
 export type ResourceSnapshot = KernelSnapshot["resources"]["all"][number];
 export type EventSnapshot = KernelSnapshot["events"]["all"][number];
 export type ApplicationSnapshot = KernelSnapshot["applications"]["installed"][number];
-export type ResourceContextAction = "open" | "open-with" | "reveal" | "rename" | "duplicate" | "move" | "add-to-workspace" | "archive" | "restore" | "delete" | "properties";
+export type ResourceContextAction =
+  | "open"
+  | "open-with"
+  | "reveal"
+  | "open-in-code"
+  | "copy-path"
+  | "remove-reference"
+  | "show-metadata"
+  | "rename"
+  | "duplicate"
+  | "move"
+  | "add-to-workspace"
+  | "archive"
+  | "restore"
+  | "delete"
+  | "properties";
 export type TaskStatus = "todo" | "in-progress" | "blocked" | "completed" | "archived";
 export type TaskPriority = "none" | "low" | "medium" | "high" | "critical";
 export type TaskView = "list" | "kanban" | "calendar";

@@ -27,12 +27,16 @@ export function normalizeMetadata(metadata: ResourceMetadata): ResourceMetadata 
 }
 
 export function normalizeMetadataPatch(metadata: ResourceMetadataPatch): ResourceMetadataPatch {
-  return {
-    ...metadata,
-    title: metadata.title === undefined ? undefined : Label.from(metadata.title).value,
-    kind: metadata.kind?.trim(),
-    attributes: metadata.attributes ? { ...metadata.attributes } : undefined,
-  };
+  const normalized: ResourceMetadataPatch = {};
+  if (metadata.title !== undefined) normalized.title = Label.from(metadata.title).value;
+  if (metadata.description !== undefined) normalized.description = metadata.description;
+  if (metadata.kind !== undefined) normalized.kind = metadata.kind.trim();
+  if (metadata.updatedAt !== undefined) normalized.updatedAt = metadata.updatedAt;
+  if (metadata.updatedBy !== undefined) normalized.updatedBy = metadata.updatedBy;
+  if (metadata.importance !== undefined) normalized.importance = metadata.importance;
+  if (metadata.color !== undefined) normalized.color = metadata.color;
+  if (metadata.attributes !== undefined) normalized.attributes = { ...metadata.attributes };
+  return normalized;
 }
 
 export function normalizeRelationship(relationship: Relationship): Relationship {

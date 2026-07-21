@@ -2,28 +2,25 @@ import type { EventBus } from "@karya/event-bus";
 import type { ProfileRepository } from "@karya/persistence";
 import type { EntityId, Profile, ProfileTemplate } from "@karya/types";
 import type { CreateProfileRequest, ProfileService, UpdateProfileRequest } from "./contracts";
-import { randomUUID } from "node:crypto";
+import { PROFILE_NAME_REQUIRED_ERROR } from "./constants";
 
 export class InMemoryProfileService implements ProfileService {
-  private activeProfileId: EntityId;
+  private activeProfileId?: EntityId;
 
   constructor(
     private readonly eventBus: EventBus,
     seed: Profile[],
     private readonly repository: ProfileRepository = new InMemoryProfileRepository(seed),
   ) {
-    if (seed.length === 0) {
-      throw new Error("ProfileService requires at least one profile");
-    }
-    this.activeProfileId = seed.find((profile) => (profile.lifecycleState ?? "active") === "active")?.id ?? seed[0].id;
+    this.activeProfileId = seed.find((profile) => (profile.lifecycleState ?? "active") === "active")?.id;
   }
 
   async listProfiles(): Promise<Profile[]> {
     return this.repository.list();
   }
 
-  async getActiveProfile(): Promise<Profile> {
-    return this.requireProfile(this.activeProfileId);
+  async getActiveProfile(): Promise<Profile | undefined> {
+    return this.activeProfileId ? this.repository.get(this.activeProfileId) : undefined;
   }
 
   async switchProfile(id: EntityId): Promise<Profile> {
@@ -31,20 +28,20 @@ export class InMemoryProfileService implements ProfileService {
   }
 
   async create(request: CreateProfileRequest): Promise<Profile> {
+    const name = request.name.trim();
+    if (!name) throw new Error(PROFILE_NAME_REQUIRED_ERROR);
     const now = new Date().toISOString();
     const template = request.template ?? "custom";
-    const profileId = randomUUID();
-    const defaultSpaceId = `space:${profileId}:default`;
+    const profileId = crypto.randomUUID();
     const profile: Profile = {
       id: profileId,
-      name: request.name.trim() || profileDefaults[template].name,
+      name,
       description: request.description ?? profileDefaults[template].description,
       icon: request.icon ?? profileDefaults[template].icon,
       accentColor: request.accentColor ?? profileDefaults[template].accentColor,
       template,
       lifecycleState: "active",
-      defaultSpaceId,
-      spaceIds: [defaultSpaceId],
+      spaceIds: [],
       createdAt: now,
       updatedAt: now,
       preferences: {
@@ -60,7 +57,14 @@ export class InMemoryProfileService implements ProfileService {
     return profile;
   }
 
-  async activateProfile(id: EntityId): Promise<Profile> {
+  async applyReplica(profile: Profile): Promise<Profile> {
+    const normalized = this.normalizeProfile(profile);
+    await this.repository.save(normalized);
+    await this.eventBus.publish("ProfileUpdated", { profile: normalized });
+    return normalized;
+  }
+
+  async activateProfile(id: EntityId, restoreWorkspace = true): Promise<Profile> {
     const current = await this.requireProfile(id);
     if (this.lifecycleState(current) !== "active") {
       throw new Error(`Profile is not active: ${id}`);
@@ -73,7 +77,7 @@ export class InMemoryProfileService implements ProfileService {
     };
     await this.repository.save(profile);
     this.activeProfileId = id;
-    await this.eventBus.publish("ProfileOpened", { profile, profileId: id });
+    await this.eventBus.publish(restoreWorkspace ? "ProfileOpened" : "ProfileViewed", { profile, profileId: id });
     await this.eventBus.publish("ActiveProfileChanged", { profileId: id, profile });
     await this.eventBus.publish("profile:activated", { profileId: id });
     await this.eventBus.publish("profile:changed", { profileId: id });
@@ -160,7 +164,9 @@ export class InMemoryProfileService implements ProfileService {
   private async transition(id: EntityId, lifecycleState: NonNullable<Profile["lifecycleState"]>): Promise<Profile> {
     const current = this.normalizeProfile(await this.requireProfile(id));
     if (id === this.activeProfileId && lifecycleState !== "active") {
-      const fallback = (await this.repository.list()).find((candidate) => candidate.id !== id && this.lifecycleState(candidate) === "active");
+      const fallback = (await this.repository.list()).find(
+        (candidate) => candidate.id !== id && this.lifecycleState(candidate) === "active",
+      );
       if (!fallback) {
         throw new Error("Cannot archive or delete the last active profile");
       }
@@ -177,7 +183,9 @@ export class InMemoryProfileService implements ProfileService {
 
     await this.repository.save(profile);
     if (id === this.activeProfileId && lifecycleState !== "active") {
-      const fallback = (await this.repository.list()).find((candidate) => candidate.id !== id && this.lifecycleState(candidate) === "active");
+      const fallback = (await this.repository.list()).find(
+        (candidate) => candidate.id !== id && this.lifecycleState(candidate) === "active",
+      );
       if (fallback) {
         await this.activateProfile(fallback.id);
       }
@@ -187,33 +195,28 @@ export class InMemoryProfileService implements ProfileService {
   }
 }
 
-const profileDefaults: Record<ProfileTemplate, { name: string; description: string; icon: string; accentColor: string }> = {
+const profileDefaults: Record<ProfileTemplate, { description: string; icon: string; accentColor: string }> = {
   personal: {
-    name: "Personal",
     description: "Life admin, writing, learning, and personal captures",
     icon: "User",
     accentColor: "#14b8a6",
   },
   startup: {
-    name: "Startup",
     description: "Product, customers, hiring, fundraising, and operations",
     icon: "Rocket",
     accentColor: "#f97316",
   },
   university: {
-    name: "University",
     description: "Coursework, research, semester planning, and campus work",
     icon: "GraduationCap",
     accentColor: "#8b5cf6",
   },
   freelancing: {
-    name: "Freelancing",
     description: "Client projects, deliverables, proposals, and invoices",
     icon: "Briefcase",
     accentColor: "#0ea5e9",
   },
   custom: {
-    name: "New Profile",
     description: "A focused responsibility inside Karya",
     icon: "UserCircle",
     accentColor: "#71717a",

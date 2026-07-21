@@ -11,12 +11,14 @@ import {
   formatShortDate,
   getDesktopHomeDefaultSpace,
   getImportWorkspaceOptions,
-  getMoveWorkspaceOptions,
   profileNameForWorkspace,
   readBooleanAttribute,
   readNumberAttribute,
   readStringAttribute,
 } from "../resources/resource-utils";
+import { ExplainThisButton } from "../screens/progressive-understanding";
+
+const LINKING_EDUCATION_STORAGE_KEY = "karya.progressive-understanding.linking.v1";
 
 function InspectorRow({ label, value }: { label: string; value: string }): ReactElement {
   return (
@@ -38,6 +40,63 @@ function readBooleanPreference(key: string, fallback: boolean): boolean {
 function writeBooleanPreference(key: string, value: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(key, String(value));
+}
+
+export function CreateNamedEntityDialog({
+  entityLabel,
+  maxLength,
+  onClose,
+  onCreate,
+  placeholder,
+}: {
+  entityLabel: "Profile" | "Workspace";
+  maxLength: number;
+  onClose(): void;
+  onCreate(name: string): Promise<void>;
+  placeholder: string;
+}): ReactElement {
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const nextName = name.trim();
+    if (!nextName) return;
+    setSubmitting(true);
+    try {
+      await onCreate(nextName);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/20 p-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
+        <h2 className="text-base font-semibold">Create {entityLabel}</h2>
+        <label className="mt-4 block text-xs font-medium text-zinc-600" htmlFor={`create-${entityLabel}-name`}>
+          Name
+        </label>
+        <input
+          id={`create-${entityLabel}-name`}
+          autoFocus
+          className="mt-2 h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+          maxLength={maxLength}
+          placeholder={placeholder}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={submitting || !name.trim()}>
+            {submitting ? "Creating…" : `Create ${entityLabel.toLocaleLowerCase()}`}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 export function ImportDestinationDialog({
@@ -67,13 +126,15 @@ export function ImportDestinationDialog({
       ? [desktopDefaultSpace]
       : [];
   const [workspaceId, setWorkspaceId] = useState(selectedProfile?.defaultSpaceId ?? desktopDefaultSpace?.id ?? "");
+  const [showLinkingEducation, setShowLinkingEducation] = useState(
+    () => operation === "link" && window.localStorage.getItem(LINKING_EDUCATION_STORAGE_KEY) !== "complete",
+  );
   const selectedWorkspace = workspaceOptions.find((workspace) => workspace.id === workspaceId) ?? workspaceOptions[0];
-  const actionLabel = operation === "link" ? "Link" : "Import";
+  const actionLabel = operation === "link" ? "Reference" : "Import";
   const importLabel = `${actionLabel} ${mode === "directory" ? "Folder" : "File"}`;
   const canChooseWorkspace = workspaceOptions.length > 1;
-  const selectedWorkspaceLabel = selectedWorkspace?.id === DESKTOP_HOME_DEFAULT_SPACE_ID
-    ? "Default Space"
-    : selectedWorkspace?.name;
+  const selectedWorkspaceLabel =
+    selectedWorkspace?.id === DESKTOP_HOME_DEFAULT_SPACE_ID ? "Default Space" : selectedWorkspace?.name;
 
   const handleProfileChange = (nextProfileId: string) => {
     setProfileId(nextProfileId);
@@ -92,24 +153,54 @@ export function ImportDestinationDialog({
     await onImport({
       profileId: selectedProfile?.id,
       workspaceId: selectedWorkspace.id,
-      defaultSpace: selectedProfile && selectedWorkspace.id === selectedProfile.defaultSpaceId
-        ? "profile"
-        : selectedProfile
-          ? "none"
-          : "user",
+      defaultSpace:
+        selectedProfile && selectedWorkspace.id === selectedProfile.defaultSpaceId
+          ? "profile"
+          : selectedProfile
+            ? "none"
+            : "user",
     });
+    if (operation === "link") {
+      window.localStorage.setItem(LINKING_EDUCATION_STORAGE_KEY, "complete");
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/20 p-4 backdrop-blur-sm">
-      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"
+      >
         <div className="mb-5">
           <p className="text-xs font-semibold uppercase text-zinc-400">{actionLabel} To</p>
           <h2 className="mt-1 text-lg font-semibold">{importLabel}</h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Choose where Karya should place the {operation === "link" ? "linked" : "imported"} resource metadata.
+            Choose which work should remember this {operation === "link" ? "reference" : "imported resource"}.
           </p>
+          {operation === "link" ? <ExplainThisButton capability="linking" className="mt-2" /> : null}
         </div>
+
+        {showLinkingEducation ? (
+          <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+            <p className="text-sm font-semibold text-zinc-900">Your files stay where they are.</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-600">
+              Linking helps Karya remember where this work belongs. Karya does not copy, move, or own the file or
+              folder.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="mt-2"
+              onClick={() => {
+                window.localStorage.setItem(LINKING_EDUCATION_STORAGE_KEY, "complete");
+                setShowLinkingEducation(false);
+              }}
+            >
+              I understand
+            </Button>
+          </div>
+        ) : null}
 
         <div className="space-y-4">
           {profileContextId ? (
@@ -121,7 +212,9 @@ export function ImportDestinationDialog({
             </div>
           ) : (
             <div>
-              <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="import-profile">Profile</label>
+              <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="import-profile">
+                Profile
+              </label>
               <select
                 id="import-profile"
                 value={profileId}
@@ -130,7 +223,9 @@ export function ImportDestinationDialog({
               >
                 <option value="none">None - Desktop Default Space</option>
                 {activeProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -138,7 +233,9 @@ export function ImportDestinationDialog({
 
           {canChooseWorkspace ? (
             <div>
-              <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="import-workspace">Workspace</label>
+              <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="import-workspace">
+                Workspace
+              </label>
               <select
                 id="import-workspace"
                 value={selectedWorkspace?.id ?? ""}
@@ -163,8 +260,12 @@ export function ImportDestinationDialog({
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={!selectedWorkspace}>{importLabel}</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!selectedWorkspace}>
+            {importLabel}
+          </Button>
         </div>
       </form>
     </div>
@@ -332,10 +433,40 @@ export function MoveResourceDialog({
   resource: ResourceSnapshot;
   snapshot: KernelSnapshot;
 }): ReactElement {
-  const workspaceOptions = getMoveWorkspaceOptions(snapshot, resource);
-  const [workspaceId, setWorkspaceId] = useState(resource.primaryWorkspaceId ?? resource.workspaceRefs[0] ?? workspaceOptions[0]?.id ?? "");
+  const desktopDefaultSpace = getDesktopHomeDefaultSpace(snapshot);
+  const activeProfiles = snapshot.profiles.all.filter((profile) => (profile.lifecycleState ?? "active") === "active");
+  const currentWorkspaceId = resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
+  const isDesktopResource = resource.defaultSpace === "user" || currentWorkspaceId === DESKTOP_HOME_DEFAULT_SPACE_ID;
+  const initialProfileId = isDesktopResource
+    ? "none"
+    : (activeProfiles.find((profile) => profile.id === resource.profileId)?.id ?? "none");
+  const [profileId, setProfileId] = useState(initialProfileId);
+  const selectedProfile = activeProfiles.find((profile) => profile.id === profileId);
+  const workspaceOptions = selectedProfile
+    ? getImportWorkspaceOptions(snapshot, selectedProfile.id)
+    : desktopDefaultSpace
+      ? [desktopDefaultSpace]
+      : [];
+  const [workspaceId, setWorkspaceId] = useState(
+    workspaceOptions.some((workspace) => workspace.id === currentWorkspaceId)
+      ? (currentWorkspaceId ?? "")
+      : (selectedProfile?.defaultSpaceId ?? workspaceOptions[0]?.id ?? ""),
+  );
   const selectedWorkspace = workspaceOptions.find((workspace) => workspace.id === workspaceId) ?? workspaceOptions[0];
   const [submitting, setSubmitting] = useState(false);
+  const canChooseWorkspace = workspaceOptions.length > 1;
+  const selectedWorkspaceLabel =
+    selectedWorkspace?.id === DESKTOP_HOME_DEFAULT_SPACE_ID ? "Default Space" : selectedWorkspace?.name;
+
+  const handleProfileChange = (nextProfileId: string) => {
+    setProfileId(nextProfileId);
+    if (nextProfileId === "none") {
+      setWorkspaceId(desktopDefaultSpace?.id ?? "");
+      return;
+    }
+    const nextProfile = activeProfiles.find((profile) => profile.id === nextProfileId);
+    setWorkspaceId(nextProfile?.defaultSpaceId ?? getImportWorkspaceOptions(snapshot, nextProfileId)[0]?.id ?? "");
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -353,18 +484,55 @@ export function MoveResourceDialog({
       <form onSubmit={submit} className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
         <p className="text-xs font-semibold uppercase text-zinc-400">Move To</p>
         <h2 className="mt-2 text-base font-semibold">{resource.metadata.title}</h2>
-        <label className="mt-4 block text-xs font-medium uppercase text-zinc-400">Destination</label>
-        <select
-          className="mt-2 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-400"
-          value={workspaceId}
-          onChange={(event) => setWorkspaceId(event.target.value)}
-        >
-          {workspaceOptions.map((workspace) => (
-            <option key={workspace.id} value={workspace.id}>
-              {workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID ? "Desktop Default Space" : `${profileNameForWorkspace(snapshot, workspace.profileId)} / ${displayWorkspaceName(workspace)}`}
-            </option>
-          ))}
-        </select>
+        <p className="mt-1 text-sm text-zinc-500">Choose which work should own this resource.</p>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="move-profile">
+              Profile
+            </label>
+            <select
+              id="move-profile"
+              value={profileId}
+              onChange={(event) => handleProfileChange(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+            >
+              <option value="none">None - Desktop Default Space</option>
+              {activeProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {canChooseWorkspace ? (
+            <div>
+              <label className="text-xs font-medium uppercase text-zinc-400" htmlFor="move-workspace">
+                Workspace
+              </label>
+              <select
+                id="move-workspace"
+                value={selectedWorkspace?.id ?? ""}
+                onChange={(event) => setWorkspaceId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+              >
+                {workspaceOptions.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {displayWorkspaceName(workspace)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs font-medium uppercase text-zinc-400">Destination</label>
+              <div className="mt-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                {selectedWorkspaceLabel ?? "No destination is available for this Profile."}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             Cancel
@@ -421,7 +589,9 @@ export function AddResourceReferenceDialog({
             >
               {activeWorkspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>
-                  {workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID ? "Desktop Default Space" : `${profileNameForWorkspace(snapshot, workspace.profileId)} / ${displayWorkspaceName(workspace)}`}
+                  {workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID
+                    ? "Desktop Default Space"
+                    : `${profileNameForWorkspace(snapshot, workspace.profileId)} / ${displayWorkspaceName(workspace)}`}
                 </option>
               ))}
             </select>
@@ -474,7 +644,10 @@ export function ResourcePropertiesDialog({
           <InspectorRow label="Name" value={resource.metadata.title} />
           <InspectorRow label="Type" value={resource.type} />
           <InspectorRow label="Owner" value={resource.defaultSpace === "user" ? "Desktop" : resource.owner} />
-          <InspectorRow label="Profile" value={resource.defaultSpace === "user" ? "Desktop" : ownerProfile?.name ?? resource.profileId} />
+          <InspectorRow
+            label="Profile"
+            value={resource.defaultSpace === "user" ? "Desktop" : (ownerProfile?.name ?? resource.profileId)}
+          />
           <InspectorRow label="Primary Workspace" value={resource.primaryWorkspaceId ?? "None"} />
           <InspectorRow label="Referenced Workspaces" value={workspaceNames.join(", ") || "None"} />
           <InspectorRow label="Created" value={resource.metadata.createdAt} />
@@ -500,12 +673,14 @@ export function ApplicationPropertiesDialog({
   onClose(): void;
   snapshot?: KernelSnapshot;
 }): ReactElement {
-  const preferredWorkspaces = snapshot?.workspaces.all
-    .filter((workspace) => workspace.pinnedApplicationIds.includes(application.metadata.id))
-    .map((workspace) => displayWorkspaceName(workspace)) ?? [];
-  const recentLaunches = snapshot?.applications.launchHistory
-    .filter((launch) => launch.applicationId === application.metadata.id)
-    .slice(0, 5) ?? [];
+  const preferredWorkspaces =
+    snapshot?.workspaces.all
+      .filter((workspace) => workspace.pinnedApplicationIds.includes(application.metadata.id))
+      .map((workspace) => displayWorkspaceName(workspace)) ?? [];
+  const recentLaunches =
+    snapshot?.applications.launchHistory
+      .filter((launch) => launch.applicationId === application.metadata.id)
+      .slice(0, 5) ?? [];
   const supportedTypes = application.metadata.supportedFileTypes?.join(", ") || "System default";
   const supportedSchemes = application.metadata.supportedUrlSchemes?.join(", ") || "None";
 
@@ -534,11 +709,23 @@ export function ApplicationPropertiesDialog({
           <InspectorRow label="Favorite" value={application.favorite ? "Yes" : "No"} />
           <InspectorRow label="Default Application" value={application.defaultApplication ? "Yes" : "No"} />
           <InspectorRow label="Bundle Identifier" value={application.metadata.bundleIdentifier ?? "None"} />
-          <InspectorRow label="Executable" value={application.metadata.executablePath ?? application.metadata.executableIdentifier ?? "Platform default"} />
+          <InspectorRow
+            label="Executable"
+            value={
+              application.metadata.executablePath ?? application.metadata.executableIdentifier ?? "Platform default"
+            }
+          />
           <InspectorRow label="Supported Types" value={supportedTypes} />
           <InspectorRow label="URL Schemes" value={supportedSchemes} />
           <InspectorRow label="Preferred Workspaces" value={preferredWorkspaces.join(", ") || "None"} />
-          <InspectorRow label="Recent Launches" value={recentLaunches.length ? recentLaunches.map((launch) => formatShortDate(launch.launchedAt)).join(", ") : "None"} />
+          <InspectorRow
+            label="Recent Launches"
+            value={
+              recentLaunches.length
+                ? recentLaunches.map((launch) => formatShortDate(launch.launchedAt)).join(", ")
+                : "None"
+            }
+          />
         </div>
       </div>
     </div>
@@ -561,14 +748,20 @@ export function AddWorkspaceApplicationDialog({
   const applications = snapshot.applications.installed
     .filter((application) => !application.hidden && application.lifecycleState !== "removed")
     .sort((left, right) => left.metadata.name.localeCompare(right.metadata.name));
-  const [selectedApplicationId, setSelectedApplicationId] = useState(applications.find((application) => !associatedIds.has(application.metadata.id))?.metadata.id ?? applications[0]?.metadata.id ?? "");
+  const [selectedApplicationId, setSelectedApplicationId] = useState(
+    applications.find((application) => !associatedIds.has(application.metadata.id))?.metadata.id ??
+      applications[0]?.metadata.id ??
+      "",
+  );
   const [includeInLaunchSet, setIncludeInLaunchSet] = useState(() => readBooleanPreference(launchPreferenceKey, true));
   const [submitting, setSubmitting] = useState(false);
   const selectedApplication = applications.find((application) => application.metadata.id === selectedApplicationId);
   const alreadyAssociated = selectedApplication ? associatedIds.has(selectedApplication.metadata.id) : false;
   const launchSetEnabled = workspace.launchSet?.enabled === true;
   const alreadyInLaunchSet = selectedApplication
-    ? workspace.launchSet?.items.some((item) => item.kind === "application" && item.applicationId === selectedApplication.metadata.id) === true
+    ? workspace.launchSet?.items.some(
+        (item) => item.kind === "application" && item.applicationId === selectedApplication.metadata.id,
+      ) === true
     : false;
   const canIncludeInLaunchSet = launchSetEnabled && Boolean(selectedApplication) && !alreadyInLaunchSet;
 
@@ -608,7 +801,8 @@ export function AddWorkspaceApplicationDialog({
         >
           {applications.map((application) => (
             <option key={application.metadata.id} value={application.metadata.id}>
-              {application.metadata.name}{associatedIds.has(application.metadata.id) ? " - already associated" : ""}
+              {application.metadata.name}
+              {associatedIds.has(application.metadata.id) ? " - already associated" : ""}
             </option>
           ))}
         </select>
@@ -666,7 +860,9 @@ export function OpenWithDialog({
   snapshot: KernelSnapshot;
 }): ReactElement {
   const workspaceId = resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
-  const applications = snapshot.applications.installed.filter((application) => applicationSupportsResource(application, resource));
+  const applications = snapshot.applications.installed.filter((application) =>
+    applicationSupportsResource(application, resource),
+  );
   const [selectedApplicationId, setSelectedApplicationId] = useState(applications[0]?.metadata.id ?? "");
   const [makePreferred, setMakePreferred] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -703,7 +899,9 @@ export function OpenWithDialog({
                   key={application.metadata.id}
                   className={cn(
                     "flex cursor-pointer items-center gap-3 rounded-lg border p-3",
-                    selectedApplicationId === application.metadata.id ? "border-zinc-950 bg-zinc-50" : "border-zinc-200",
+                    selectedApplicationId === application.metadata.id
+                      ? "border-zinc-950 bg-zinc-50"
+                      : "border-zinc-200",
                   )}
                 >
                   <input
@@ -715,7 +913,9 @@ export function OpenWithDialog({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{application.metadata.name}</span>
-                    <span className="block truncate text-xs text-zinc-500">{application.metadata.category ?? "Application"}</span>
+                    <span className="block truncate text-xs text-zinc-500">
+                      {application.metadata.category ?? "Application"}
+                    </span>
                   </span>
                 </label>
               ))}

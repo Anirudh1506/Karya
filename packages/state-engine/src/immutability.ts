@@ -5,13 +5,19 @@ export function cloneSnapshot(snapshot: KernelSnapshot): KernelSnapshot {
 }
 
 export function freezeSnapshot(snapshot: KernelSnapshot): KernelSnapshot {
-  return deepFreeze(snapshot);
+  return cloneAndFreeze(snapshot);
 }
 
-function deepFreeze<TValue>(value: TValue): TValue {
-  if (value && typeof value === "object") {
-    Object.freeze(value);
-    Object.values(value).forEach((child) => deepFreeze(child));
+function cloneAndFreeze<TValue>(value: TValue): TValue {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+
+  // Clone only newly introduced branches so freezing a snapshot never freezes
+  // an event payload owned by another service. Already-frozen branches are
+  // immutable and can be shared safely between snapshots.
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((child) => cloneAndFreeze(child))) as TValue;
   }
-  return value;
+
+  const clone = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneAndFreeze(child)])) as TValue;
+  return Object.freeze(clone);
 }

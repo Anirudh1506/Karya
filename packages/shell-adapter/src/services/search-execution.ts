@@ -242,13 +242,6 @@ async function executeNamedCommand(
         payload: { displayTitle: "Untitled Resource", resourceType: "resource", tags: ["created"] },
       });
       return;
-    case "create-workspace":
-      await execute({
-        id: crypto.randomUUID(),
-        type: "CreateWorkspaceCommand",
-        payload: { name: "Untitled Workspace" },
-      });
-      return;
     case "create-task": {
       const task = await execute<Resource>({
         id: crypto.randomUUID(),
@@ -265,13 +258,6 @@ async function executeNamedCommand(
       });
       return;
     }
-    case "create-profile":
-      await execute({
-        id: crypto.randomUUID(),
-        type: "CreateProfileCommand",
-        payload: { name: "Untitled Profile", template: "custom" },
-      });
-      return;
     case "resume-last-workspace": {
       const snapshot = await getSnapshot();
       await execute({
@@ -396,18 +382,25 @@ function resolveSnapshotCreateDestination(snapshot: ShellSnapshot): ImportDestin
   }
   if (activeSurface.type === "profile") {
     const profile = snapshot.profiles.all.find((candidate) => candidate.id === activeSurface.profileId);
-    return profile ? { profileId: profile.id, workspaceId: profile.defaultSpaceId, defaultSpace: "profile" } : undefined;
+    return profile
+      ? { profileId: profile.id, workspaceId: profile.defaultSpaceId, defaultSpace: "profile" }
+      : undefined;
   }
   if (activeSurface.type === "folder") {
     const folder = snapshot.resources.all.find((resource) => resource.id === activeSurface.resourceId);
     const workspaceId = folder?.primaryWorkspaceId ?? folder?.workspaceRefs[0];
     return workspaceId ? destinationForSnapshotWorkspace(snapshot, workspaceId) : undefined;
   }
-  const desktopDefaultSpace = snapshot.workspaces.all.find((workspace) => workspace.id === "workspace-desktop-home-default-space");
+  const desktopDefaultSpace = snapshot.workspaces.all.find(
+    (workspace) => workspace.id === "workspace-desktop-home-default-space",
+  );
   return desktopDefaultSpace ? { workspaceId: desktopDefaultSpace.id, defaultSpace: "user" } : undefined;
 }
 
-function destinationForSnapshotWorkspace(snapshot: ShellSnapshot, workspaceId: EntityId): ImportDestination | undefined {
+function destinationForSnapshotWorkspace(
+  snapshot: ShellSnapshot,
+  workspaceId: EntityId,
+): ImportDestination | undefined {
   const workspace = snapshot.workspaces.all.find((candidate) => candidate.id === workspaceId);
   if (!workspace || workspace.lifecycleState === "deleted") return undefined;
   if (workspace.id === "workspace-desktop-home-default-space") {

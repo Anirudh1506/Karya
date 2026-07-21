@@ -8,10 +8,24 @@ contextBridge.exposeInMainWorld("karyaShell", {
   showProfileContextMenu(profile: { id: string; name: string; archived: boolean }) {
     return ipcRenderer.invoke("karya:profile-context-menu", profile);
   },
-  showResourceContextMenu(resource: { id: string; title: string; archived: boolean; hasLocation: boolean }) {
+  showResourceContextMenu(resource: {
+    id: string;
+    title: string;
+    archived: boolean;
+    hasLocation: boolean;
+    referencedFolder: boolean;
+    canOpenInCode: boolean;
+  }) {
     return ipcRenderer.invoke("karya:resource-context-menu", resource);
   },
-  showApplicationContextMenu(application: { id: string; name: string; pinned: boolean; favorite: boolean; preferred: boolean; hasActiveWorkspace: boolean }) {
+  showApplicationContextMenu(application: {
+    id: string;
+    name: string;
+    pinned: boolean;
+    favorite: boolean;
+    preferred: boolean;
+    hasActiveWorkspace: boolean;
+  }) {
     return ipcRenderer.invoke("karya:application-context-menu", application);
   },
   subscribe(listener: (snapshot: unknown) => void) {

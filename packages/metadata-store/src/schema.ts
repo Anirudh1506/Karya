@@ -1,7 +1,6 @@
 /// <reference path="./better-sqlite3.d.ts" />
 import type { Database } from "better-sqlite3";
-
-const CURRENT_SCHEMA_VERSION = 1;
+import { CURRENT_SCHEMA_VERSION, NULLABLE_PROFILE_DEFAULT_SPACE_MIGRATION_VERSION } from "./constants";
 
 export function migrateMetadataStore(database: Database): void {
   database.pragma("journal_mode = WAL");
@@ -22,12 +21,168 @@ export function migrateMetadataStore(database: Database): void {
   if (current < 1) {
     applyInitialMigration(database);
   }
+  if (current < 2) {
+    applyActivityMigration(database);
+  }
+  if (current < 3) applyNotificationMigration(database);
+  if (current < 4) applyEditingMigration(database);
+  if (current < 5) applySynchronizationMigration(database);
+  if (current < 6) applyAccountMigration(database);
+  if (current < 7) applyTransportMigration(database);
+  if (current < NULLABLE_PROFILE_DEFAULT_SPACE_MIGRATION_VERSION) {
+    applyNullableProfileDefaultSpaceMigration(database);
+  }
+}
+
+function applyNullableProfileDefaultSpaceMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    const columns = database.prepare("PRAGMA table_info(profiles)").all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    const defaultSpaceColumn = columns.find((column) => column.name === "default_space_id");
+
+    if (defaultSpaceColumn?.notnull === 1) {
+      database.exec(`
+        ALTER TABLE profiles RENAME TO profiles_with_required_default_space;
+
+        CREATE TABLE profiles (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          default_space_id TEXT,
+          created_at TEXT NOT NULL,
+          payload TEXT NOT NULL
+        );
+
+        INSERT INTO profiles (id, name, default_space_id, created_at, payload)
+        SELECT id, name, default_space_id, created_at, payload
+        FROM profiles_with_required_default_space;
+
+        DROP TABLE profiles_with_required_default_space;
+      `);
+    }
+
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(NULLABLE_PROFILE_DEFAULT_SPACE_MIGRATION_VERSION, new Date().toISOString());
+  });
+  apply();
+}
+
+function applyTransportMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS transport_sessions (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS idx_transport_sessions_updated ON transport_sessions(updated_at DESC);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(7, new Date().toISOString());
+  });
+  apply();
+}
+
+function applyAccountMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS idx_accounts_updated ON accounts(updated_at DESC);
+      CREATE TABLE IF NOT EXISTS trusted_devices (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS idx_trusted_devices_updated ON trusted_devices(updated_at DESC);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(6, new Date().toISOString());
+  });
+  apply();
+}
+
+function applySynchronizationMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS sync_operations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, sequence INTEGER NOT NULL, timestamp TEXT NOT NULL, acknowledgement_state TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_operations_device_sequence ON sync_operations(device_id, sequence);
+      CREATE INDEX IF NOT EXISTS idx_sync_operations_queue ON sync_operations(acknowledgement_state, timestamp, id);
+      CREATE TABLE IF NOT EXISTS sync_device_states (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS sync_replay_receipts (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS sync_conflicts (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(5, new Date().toISOString());
+  });
+  apply();
+}
+
+function applyEditingMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS editable_contents (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS edit_sessions (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS edit_checkpoints (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS idx_editable_contents_updated ON editable_contents(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_edit_sessions_updated ON edit_sessions(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_edit_checkpoints_updated ON edit_checkpoints(updated_at DESC);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(4, new Date().toISOString());
+  });
+  apply();
+}
+
+function applyNotificationMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        activity_id TEXT UNIQUE,
+        created_at TEXT NOT NULL,
+        profile_id TEXT,
+        workspace_id TEXT,
+        resource_id TEXT,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_notifications_profile_status ON notifications(profile_id, status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notifications_workspace ON notifications(workspace_id, created_at DESC);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(3, new Date().toISOString());
+  });
+  apply();
+}
+
+function applyActivityMigration(database: Database): void {
+  const apply = database.transaction(() => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS activities (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        profile_id TEXT,
+        workspace_id TEXT,
+        resource_id TEXT,
+        payload TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_activities_occurred ON activities(occurred_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_activities_profile ON activities(profile_id, occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activities_workspace ON activities(workspace_id, occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activities_resource ON activities(resource_id, occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activities_event_type ON activities(event_type, occurred_at DESC);
+    `);
+    database
+      .prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+      .run(2, new Date().toISOString());
+  });
+  apply();
 }
 
 function getCurrentVersion(database: Database): number {
-  const row = database
-    .prepare("SELECT MAX(version) AS version FROM schema_migrations")
-    .get() as { version?: number | null } | undefined;
+  const row = database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as
+    { version?: number | null } | undefined;
   return row?.version ?? 0;
 }
 
@@ -86,7 +241,7 @@ function applyInitialMigration(database: Database): void {
       CREATE TABLE profiles (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        default_space_id TEXT NOT NULL,
+        default_space_id TEXT,
         created_at TEXT NOT NULL,
         payload TEXT NOT NULL
       );

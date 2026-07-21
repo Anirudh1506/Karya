@@ -1,9 +1,19 @@
-import type { ContinuitySession, ContinuityWorkspaceSession, EntityId, Profile, Workspace, WorkspaceActivity } from "@karya/types";
+import type {
+  ContinuitySession,
+  ContinuityWorkspaceSession,
+  EntityId,
+  Profile,
+  Workspace,
+  WorkspaceActivity,
+} from "@karya/types";
 import type { KernelSnapshot, WorkspaceInsights } from "../types";
 
 const DESKTOP_HOME_DEFAULT_SPACE_ID = "workspace-desktop-home-default-space";
 
-export function createFolderParentBreadcrumbs(workspace: Workspace, profile?: Profile): KernelSnapshot["shell"]["breadcrumbs"] {
+export function createFolderParentBreadcrumbs(
+  workspace: Workspace,
+  profile?: Profile,
+): KernelSnapshot["shell"]["breadcrumbs"] {
   if (workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID) {
     return [
       { id: "surface:home", label: "Home" },
@@ -19,7 +29,9 @@ export function createFolderParentBreadcrumbs(workspace: Workspace, profile?: Pr
   ];
 }
 
-export function deriveContinueWorkingByWorkspace(session: ContinuitySession): KernelSnapshot["continuity"]["continueWorkingByWorkspace"] {
+export function deriveContinueWorkingByWorkspace(
+  session: ContinuitySession,
+): KernelSnapshot["continuity"]["continueWorkingByWorkspace"] {
   return Object.fromEntries(
     Object.entries(session.workspaceSessions ?? {}).map(([workspaceId, workspaceSession]) => [
       workspaceId,
@@ -35,11 +47,15 @@ export function deriveContinuityState(
   session: ContinuitySession,
   workspaces: Workspace[],
 ): Omit<KernelSnapshot["continuity"], "recentSessions"> {
-  const activeWorkspaceSession = session.activeWorkspaceId ? session.workspaceSessions?.[session.activeWorkspaceId] : undefined;
-  const lastWorkspaceId = Object.values(session.workspaceSessions ?? {})
-    .sort((left, right) => right.lastActiveAt.localeCompare(left.lastActiveAt))[0]?.workspaceId;
+  const activeWorkspaceSession = session.activeWorkspaceId
+    ? session.workspaceSessions?.[session.activeWorkspaceId]
+    : undefined;
+  const lastWorkspaceId = Object.values(session.workspaceSessions ?? {}).sort((left, right) =>
+    right.lastActiveAt.localeCompare(left.lastActiveAt),
+  )[0]?.workspaceId;
 
   return {
+    continueWorking: [],
     currentSession: session,
     activeWorkspaceSession,
     resumeContext: session.resumeContext,
@@ -56,7 +72,9 @@ export function deriveContinuityState(
   };
 }
 
-export function deriveActivityByWorkspace(session: ContinuitySession): KernelSnapshot["continuity"]["activityByWorkspace"] {
+export function deriveActivityByWorkspace(
+  session: ContinuitySession,
+): KernelSnapshot["continuity"]["activityByWorkspace"] {
   return Object.fromEntries(
     Object.entries(session.workspaceSessions ?? {}).map(([workspaceId, workspaceSession]) => [
       workspaceId,
@@ -65,7 +83,9 @@ export function deriveActivityByWorkspace(session: ContinuitySession): KernelSna
   );
 }
 
-export function deriveWorkspaceInsightsByWorkspace(session: ContinuitySession): KernelSnapshot["continuity"]["workspaceInsightsByWorkspace"] {
+export function deriveWorkspaceInsightsByWorkspace(
+  session: ContinuitySession,
+): KernelSnapshot["continuity"]["workspaceInsightsByWorkspace"] {
   return Object.fromEntries(
     Object.entries(session.workspaceSessions ?? {}).map(([workspaceId, workspaceSession]) => [
       workspaceId,
@@ -75,7 +95,10 @@ export function deriveWorkspaceInsightsByWorkspace(session: ContinuitySession): 
 }
 
 export function deriveWorkspaceInsights(workspaceSession: ContinuityWorkspaceSession): WorkspaceInsights {
-  const applicationMap = new Map<EntityId, { applicationId: EntityId; name: string; launchCount: number; lastOpenedAt: string }>();
+  const applicationMap = new Map<
+    EntityId,
+    { applicationId: EntityId; name: string; launchCount: number; lastOpenedAt: string }
+  >();
   const resources: WorkspaceInsights["resources"] = {
     opened: 0,
     edited: 0,
@@ -104,9 +127,10 @@ export function deriveWorkspaceInsights(workspaceSession: ContinuityWorkspaceSes
         applicationId: activity.applicationId,
         name: activity.title,
         launchCount: (existing?.launchCount ?? 0) + 1,
-        lastOpenedAt: existing?.lastOpenedAt && existing.lastOpenedAt > activity.occurredAt
-          ? existing.lastOpenedAt
-          : activity.occurredAt,
+        lastOpenedAt:
+          existing?.lastOpenedAt && existing.lastOpenedAt > activity.occurredAt
+            ? existing.lastOpenedAt
+            : activity.occurredAt,
       });
       continue;
     }
@@ -180,7 +204,10 @@ export function toMeaningfulActivity(activity: WorkspaceActivity | undefined): W
   };
 }
 
-export function restoreShellFromSession(snapshot: KernelSnapshot, session: ContinuitySession): KernelSnapshot["shell"] | undefined {
+export function restoreShellFromSession(
+  snapshot: KernelSnapshot,
+  session: ContinuitySession,
+): KernelSnapshot["shell"] | undefined {
   const workspaceId = session.activeWorkspaceId;
   if (!workspaceId) return undefined;
   const workspaceSession = session.workspaceSessions?.[workspaceId];

@@ -1,4 +1,11 @@
-import { Color, Identifier, Timestamp, Workspace as WorkspaceAggregate, type WorkspaceLaunchSet as DomainWorkspaceLaunchSet, type WorkspaceProps } from "@karya/domain";
+import {
+  Color,
+  Identifier,
+  Timestamp,
+  Workspace as WorkspaceAggregate,
+  type WorkspaceLaunchSet as DomainWorkspaceLaunchSet,
+  type WorkspaceProps,
+} from "@karya/domain";
 import type { Workspace, WorkspaceLaunchSet } from "@karya/types";
 
 export function toDomain(workspace: Workspace): WorkspaceAggregate {
@@ -30,6 +37,7 @@ export function toDomain(workspace: Workspace): WorkspaceAggregate {
     resourceRefs: workspace.resourceRefs.map((id) => Identifier.from(id, "ResourceId")),
     pinnedApplicationIds: workspace.pinnedApplicationIds.map((id) => Identifier.from(id, "ApplicationId")),
     launchSet: workspace.launchSet ? toDomainLaunchSet(workspace.launchSet) : undefined,
+    settings: workspace.settings ? toDomainSettings(workspace.settings) : undefined,
     activeSession: workspace.activeSession ? toDomainSession(workspace.activeSession) : undefined,
     preservedSession: workspace.preservedSession ? toDomainSession(workspace.preservedSession) : undefined,
     lifecycle: workspace.lifecycleState ?? "open",
@@ -72,6 +80,7 @@ export function toDto(workspace: WorkspaceAggregate): Workspace {
     resourceRefs: snapshot.resourceRefs.map((id) => id.value),
     pinnedApplicationIds: snapshot.pinnedApplicationIds.map((id) => id.value),
     launchSet: snapshot.launchSet ? toDtoLaunchSet(snapshot.launchSet) : undefined,
+    settings: snapshot.settings ? toDtoSettings(snapshot.settings) : undefined,
     activeSession: snapshot.activeSession ? toDtoSession(snapshot.activeSession) : undefined,
     preservedSession: snapshot.preservedSession ? toDtoSession(snapshot.preservedSession) : undefined,
     lifecycleState: snapshot.lifecycle,
@@ -94,24 +103,32 @@ export function toDto(workspace: WorkspaceAggregate): Workspace {
 export function toDomainLaunchSet(launchSet: WorkspaceLaunchSet): DomainWorkspaceLaunchSet {
   return {
     enabled: launchSet.enabled,
-    items: launchSet.items.map((item) => item.kind === "application"
-      ? {
-          id: Identifier.from(item.id, "WorkspaceLaunchItemId"),
-          kind: "application" as const,
-          applicationId: Identifier.from(item.applicationId, "ApplicationId"),
-          behavior: item.behavior,
-          delayMs: item.delayMs,
-        }
-      : {
-          id: Identifier.from(item.id, "WorkspaceLaunchItemId"),
-          kind: "resource" as const,
-          resourceId: Identifier.from(item.resourceId, "ResourceId"),
-          behavior: item.behavior,
-          applicationId: item.applicationId ? Identifier.from(item.applicationId, "ApplicationId") : undefined,
-          delayMs: item.delayMs,
-        }),
+    items: launchSet.items.map((item) =>
+      item.kind === "application"
+        ? {
+            id: Identifier.from(item.id, "WorkspaceLaunchItemId"),
+            enabled: item.enabled,
+            kind: "application" as const,
+            applicationId: Identifier.from(item.applicationId, "ApplicationId"),
+            behavior: item.behavior,
+            delayMs: item.delayMs,
+          }
+        : {
+            id: Identifier.from(item.id, "WorkspaceLaunchItemId"),
+            enabled: item.enabled,
+            kind: "resource" as const,
+            resourceId: Identifier.from(item.resourceId, "ResourceId"),
+            behavior: item.behavior,
+            applicationId: item.applicationId ? Identifier.from(item.applicationId, "ApplicationId") : undefined,
+            delayMs: item.delayMs,
+          },
+    ),
     focusItemId: launchSet.focusItemId ? Identifier.from(launchSet.focusItemId, "WorkspaceLaunchItemId") : undefined,
     restoreInspector: launchSet.restoreInspector,
+    executionMode: launchSet.executionMode,
+    failureHandling: launchSet.failureHandling,
+    restoreBehavior: launchSet.restoreBehavior,
+    notifyWhenReady: launchSet.notifyWhenReady,
     updatedAt: Timestamp.from(launchSet.updatedAt),
   };
 }
@@ -119,25 +136,51 @@ export function toDomainLaunchSet(launchSet: WorkspaceLaunchSet): DomainWorkspac
 export function toDtoLaunchSet(launchSet: DomainWorkspaceLaunchSet): WorkspaceLaunchSet {
   return {
     enabled: launchSet.enabled,
-    items: launchSet.items.map((item) => item.kind === "application"
-      ? {
-          id: item.id.value,
-          kind: "application" as const,
-          applicationId: item.applicationId.value,
-          behavior: item.behavior,
-          delayMs: item.delayMs,
-        }
-      : {
-          id: item.id.value,
-          kind: "resource" as const,
-          resourceId: item.resourceId.value,
-          behavior: item.behavior,
-          applicationId: item.applicationId?.value,
-          delayMs: item.delayMs,
-        }),
+    items: launchSet.items.map((item) =>
+      item.kind === "application"
+        ? {
+            id: item.id.value,
+            enabled: item.enabled,
+            kind: "application" as const,
+            applicationId: item.applicationId.value,
+            behavior: item.behavior,
+            delayMs: item.delayMs,
+          }
+        : {
+            id: item.id.value,
+            enabled: item.enabled,
+            kind: "resource" as const,
+            resourceId: item.resourceId.value,
+            behavior: item.behavior,
+            applicationId: item.applicationId?.value,
+            delayMs: item.delayMs,
+          },
+    ),
     focusItemId: launchSet.focusItemId?.value,
     restoreInspector: launchSet.restoreInspector,
+    executionMode: launchSet.executionMode,
+    failureHandling: launchSet.failureHandling,
+    restoreBehavior: launchSet.restoreBehavior,
+    notifyWhenReady: launchSet.notifyWhenReady,
     updatedAt: launchSet.updatedAt.value,
+  };
+}
+
+function toDomainSettings(settings: NonNullable<Workspace["settings"]>): NonNullable<WorkspaceProps["settings"]> {
+  return {
+    appearance: { ...settings.appearance },
+    experience: { ...settings.experience },
+    continuity: { ...settings.continuity },
+    preferences: { ...settings.preferences },
+  };
+}
+
+function toDtoSettings(settings: NonNullable<WorkspaceProps["settings"]>): NonNullable<Workspace["settings"]> {
+  return {
+    appearance: { ...settings.appearance },
+    experience: { ...settings.experience },
+    continuity: { ...settings.continuity },
+    preferences: { ...settings.preferences },
   };
 }
 

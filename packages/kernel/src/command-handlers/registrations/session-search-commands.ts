@@ -1,7 +1,5 @@
-import type { Resource, SearchResult } from "@karya/types";
+import { fileNameFromPath, parentPath, type Resource } from "@karya/types";
 import type { CommandBus } from "../../command-bus";
-import type { ServiceRegistry } from "../../service-registry";
-import { basename, dirname } from "node:path";
 import {
   assertPathAvailable,
   checkResourceAvailability,
@@ -23,7 +21,6 @@ import {
   normalizeBookmarkUrl,
   openResourceById,
   openResourceWithApplication,
-  rankSearchResultsByActivity,
   readStringAttribute,
   recordResourceNavigation,
   registryUpdateMetadata,
@@ -38,7 +35,7 @@ import {
 } from "../helpers";
 
 export function registerSessionSearchCommandHandlers(commandBus: CommandBus): void {
-commandBus.register("ResumeContextCommand", async (command, context) => {
+  commandBus.register("ResumeContextCommand", async (command, context) => {
     const { registry, publish } = context;
     const requestedResourceId = command.payload.resourceIds[0];
     const resource = requestedResourceId
@@ -54,18 +51,19 @@ commandBus.register("ResumeContextCommand", async (command, context) => {
       : command.payload.workspaceId
         ? savedContext?.workspaceId === command.payload.workspaceId
         : Boolean(savedContext);
-    const sessionContext = requestedWorkspaceSession && !requestedResourceId
-      ? {
-          profileId: requestedWorkspaceSession.profileId,
-          workspaceId: requestedWorkspaceSession.workspaceId,
-          resourceIds: requestedWorkspaceSession.activeResourceIds.length
-            ? requestedWorkspaceSession.activeResourceIds
-            : requestedWorkspaceSession.recentResourceIds,
-          applicationIds: requestedWorkspaceSession.launchedApplicationIds,
-          navigation: requestedWorkspaceSession.lastNavigationContext,
-          selectedResourceId: requestedWorkspaceSession.lastSelectedResourceId,
-        }
-      : undefined;
+    const sessionContext =
+      requestedWorkspaceSession && !requestedResourceId
+        ? {
+            profileId: requestedWorkspaceSession.profileId,
+            workspaceId: requestedWorkspaceSession.workspaceId,
+            resourceIds: requestedWorkspaceSession.activeResourceIds.length
+              ? requestedWorkspaceSession.activeResourceIds
+              : requestedWorkspaceSession.recentResourceIds,
+            applicationIds: requestedWorkspaceSession.launchedApplicationIds,
+            navigation: requestedWorkspaceSession.lastNavigationContext,
+            selectedResourceId: requestedWorkspaceSession.lastSelectedResourceId,
+          }
+        : undefined;
     const workspaceId =
       command.payload.workspaceId ??
       sessionContext?.workspaceId ??
@@ -77,9 +75,10 @@ commandBus.register("ResumeContextCommand", async (command, context) => {
       : sessionContext?.resourceIds.length
         ? sessionContext.resourceIds
         : savedContextMatches
-          ? savedContext?.resourceIds ?? []
+          ? (savedContext?.resourceIds ?? [])
           : [];
-    const profileId = resource?.profileId ?? sessionContext?.profileId ?? savedContext?.profileId ?? currentSession.activeProfileId;
+    const profileId =
+      resource?.profileId ?? sessionContext?.profileId ?? savedContext?.profileId ?? currentSession.activeProfileId;
     const selectedResourceId = requestedResourceId ?? sessionContext?.selectedResourceId ?? resourceIds[0];
 
     if (workspaceId) {
@@ -158,12 +157,15 @@ commandBus.register("ResumeContextCommand", async (command, context) => {
   });
 
   commandBus.register("SearchCommand", async (command, { registry, publish }) => {
-    const results = await registry.resolve("searchService").query(command.payload.term);
-    const expandedResults = await expandRelationshipResults(results, registry);
     const session = await registry.resolve("continuityService").getCurrentSession();
-    const rankedResults = rankSearchResultsByActivity(expandedResults, session);
-    await publish("SearchCompleted", { query: command.payload.term, results: rankedResults });
-    return rankedResults;
+    const results = await registry.resolve("searchService").query(command.payload.term, {
+      activeProfileId: session.activeProfileId,
+      activeWorkspaceId: session.activeWorkspaceId,
+      recentResourceIds: session.recentResourceIds,
+      types: command.payload.types,
+    });
+    await publish("SearchCompleted", { query: command.payload.term, results });
+    return results;
   });
 
   commandBus.register("OpenSettingCommand", async (command, { publish }) => {
@@ -187,36 +189,4 @@ commandBus.register("ResumeContextCommand", async (command, context) => {
     await context.publish("CalendarEventSelected", { eventId: command.payload.eventId });
     return command.payload.eventId;
   });
-}
-
-async function expandRelationshipResults(results: SearchResult[], registry: ServiceRegistry): Promise<SearchResult[]> {
-  const expanded = [...results];
-  const seenDocumentIds = new Set(expanded.map((result) => result.document.id));
-  const documents = await registry.resolve("searchService").listDocuments();
-
-  for (const result of results) {
-    if (result.document.type !== "resource" && result.document.type !== "event") continue;
-    const relatedObjects = await registry.resolve("relationshipService").listRelatedObjects({
-      id: result.document.sourceId,
-      type: result.document.type,
-    });
-
-    for (const related of relatedObjects) {
-      const document = documents.find((candidate) =>
-        candidate.type === related.ref.type && candidate.sourceId === related.ref.id,
-      );
-      if (!document || seenDocumentIds.has(document.id)) continue;
-      seenDocumentIds.add(document.id);
-      expanded.push({
-        document: {
-          ...document,
-          subtitle: document.subtitle ? `${document.subtitle} · Related` : "Related",
-          keywords: [...document.keywords, result.document.title, related.relationship.type],
-        },
-        score: Math.max(1, Math.floor(result.score * 0.6)),
-      });
-    }
-  }
-
-  return expanded.sort((left, right) => right.score - left.score);
 }

@@ -39,10 +39,12 @@ export interface WorkspaceSession {
 
 export type WorkspaceLaunchItemKind = "application" | "resource";
 export type WorkspaceLaunchResourceBehavior = "open" | "reveal" | "skip" | "open-pinned" | "open-background";
-export type WorkspaceLaunchApplicationBehavior = "launch" | "launch-minimized" | "reuse-existing" | "new-instance" | "skip-if-running";
+export type WorkspaceLaunchApplicationBehavior =
+  "launch" | "launch-minimized" | "reuse-existing" | "new-instance" | "skip-if-running";
 
 export interface WorkspaceLaunchApplicationItem {
   id: EntityId;
+  enabled?: boolean;
   kind: "application";
   applicationId: EntityId;
   behavior: WorkspaceLaunchApplicationBehavior;
@@ -51,6 +53,7 @@ export interface WorkspaceLaunchApplicationItem {
 
 export interface WorkspaceLaunchResourceItem {
   id: EntityId;
+  enabled?: boolean;
   kind: "resource";
   resourceId: EntityId;
   behavior: WorkspaceLaunchResourceBehavior;
@@ -65,7 +68,53 @@ export interface WorkspaceLaunchSet {
   items: WorkspaceLaunchSetItem[];
   focusItemId?: EntityId;
   restoreInspector: boolean;
+  executionMode?: "sequential" | "parallel";
+  failureHandling?: "continue" | "stop" | "notify";
+  restoreBehavior?: "continuity-then-launch" | "launch-only" | "continuity-only";
+  notifyWhenReady?: boolean;
   updatedAt: ISODateString;
+}
+
+export interface WorkspaceSettings {
+  appearance: {
+    theme: "inherit" | "light" | "dark" | "focus";
+    accentColor: string;
+    banner: "none" | "subtle" | "solid";
+    wallpaper: "none" | "grid" | "ambient";
+    iconPack: "system" | "minimal" | "expressive";
+    backgroundBlur: "off" | "subtle" | "strong";
+  };
+  experience: {
+    defaultLanding: "overview" | "continue-working" | "resources" | "activity" | "relationships";
+    resourceDisplay: "grid" | "list";
+    resourceSort: "updated" | "title" | "type";
+    notificationPreference: "important" | "all" | "none";
+    searchPreference: "workspace" | "profile" | "global";
+    openBehavior: "restore-context" | "open-clean";
+  };
+  continuity: {
+    enabled: boolean;
+    restorePreference: "full-context" | "last-resource" | "workspace-only";
+    rankingPreference: "balanced" | "recency" | "modified" | "manual";
+    resourcePriority: "active" | "pinned" | "recent";
+    restoreLayout: boolean;
+  };
+  preferences: {
+    capturePreference: "workspace" | "profile-inbox";
+    relationshipPreference: "suggest" | "manual";
+    activityPreference: "meaningful" | "all";
+    searchContextBoost: "workspace" | "profile" | "none";
+    synchronizationPreference: "inherit" | "local-only";
+    offlinePreference: "local-first" | "online-when-available";
+  };
+}
+
+export interface WorkspaceSettingsUpdate {
+  name?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  settings?: WorkspaceSettings;
 }
 
 export interface WorkspacePermissions {
@@ -82,6 +131,7 @@ export interface Workspace {
   resourceRefs: EntityId[];
   pinnedApplicationIds: EntityId[];
   launchSet?: WorkspaceLaunchSet;
+  settings?: WorkspaceSettings;
   activeSession?: WorkspaceSession;
   preservedSession?: WorkspaceSession;
   lifecycleState: WorkspaceLifecycleState;

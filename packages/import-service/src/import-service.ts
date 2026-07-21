@@ -1,5 +1,12 @@
-import { basename } from "node:path";
-import type { ImportDestination, ImportJob, ImportJobSummary, JobId, JobSnapshot, Resource } from "@karya/types";
+import {
+  fileNameFromPath,
+  type ImportDestination,
+  type ImportJob,
+  type ImportJobSummary,
+  type JobId,
+  type JobSnapshot,
+  type Resource,
+} from "@karya/types";
 import type {
   ImportCommandExecutor,
   ImportEventPublisher,
@@ -38,7 +45,11 @@ export class DefaultImportService implements ImportService {
       progress: { processed: 0, total: 1, currentPath: path },
       run: async ({ update }) => {
         const summary = createSummary(queuedAt);
-        const result = await this.importCandidate({ path, relativePath: displayTitle ?? path, displayTitle }, undefined, destination);
+        const result = await this.importCandidate(
+          { path, relativePath: displayTitle ?? path, displayTitle },
+          undefined,
+          destination,
+        );
         summary.imported = 1;
         summary.skippedDuplicates = result.contentAddress ? 0 : 0;
         await update({ processed: 1, total: 1, currentPath: path });
@@ -57,7 +68,7 @@ export class DefaultImportService implements ImportService {
     const folder = await this.commandExecutor.execute<Resource>({
       id: crypto.randomUUID(),
       type: "CreateFolderResourceCommand",
-      payload: { path, displayTitle: basename(path) || path, destination },
+      payload: { path, displayTitle: fileNameFromPath(path) || path, destination },
     });
     const queuedAt = Date.now();
     const id = await this.jobManager.queue({

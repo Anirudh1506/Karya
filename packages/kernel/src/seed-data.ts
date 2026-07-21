@@ -1,4 +1,15 @@
-import type { CalendarEvent, ContinuitySession, InstalledApplication, KaryaActivity, KaryaNotification, Profile, Resource, SettingDefinition, Workspace } from "@karya/types";
+import type {
+  CalendarEvent,
+  ContinuitySession,
+  InstalledApplication,
+  KaryaActivity,
+  KaryaNotification,
+  Profile,
+  Resource,
+  SettingDefinition,
+  Workspace,
+} from "@karya/types";
+import { DEFAULT_PROFILE_NAME, DESKTOP_HOME_DEFAULT_SPACE_ID } from "./constants";
 
 export interface SeedDataOptions {
   includeDemoContent?: boolean;
@@ -20,7 +31,7 @@ export function createSeedData(options: SeedDataOptions = {}): {
   const includeDemoContent = options.includeDemoContent ?? true;
   const profileId = "profile-primary";
   const workspaceId = "workspace-default-space";
-  const desktopDefaultSpaceId = "workspace-desktop-home-default-space";
+  const desktopDefaultSpaceId = DESKTOP_HOME_DEFAULT_SPACE_ID;
   const demoResourceIds = includeDemoContent ? ["resource-karya-brief", "resource-system-map"] : [];
 
   return {
@@ -28,7 +39,7 @@ export function createSeedData(options: SeedDataOptions = {}): {
     profiles: [
       {
         id: profileId,
-        name: options.profileName?.trim() || "New Profile",
+        name: options.profileName?.trim() || DEFAULT_PROFILE_NAME,
         defaultSpaceId: workspaceId,
         spaceIds: [workspaceId],
         createdAt: now,

@@ -2,7 +2,9 @@ import type { ContinuitySession, SearchResult } from "@karya/types";
 
 export function rankSearchResultsByActivity(results: SearchResult[], session: ContinuitySession): SearchResult[] {
   const resourceRanks = new Map(session.recentResourceIds.map((resourceId, index) => [resourceId, 30 - index]));
-  const applicationRanks = new Map((session.recentApplicationIds ?? []).map((applicationId, index) => [applicationId, 20 - index]));
+  const applicationRanks = new Map(
+    (session.recentApplicationIds ?? []).map((applicationId, index) => [applicationId, 20 - index]),
+  );
   const workspaceRanks = new Map(
     Object.values(session.workspaceSessions ?? {})
       .sort((left, right) => right.lastActiveAt.localeCompare(left.lastActiveAt))

@@ -45,10 +45,12 @@ export interface WorkspaceSession {
 }
 
 export type WorkspaceLaunchResourceBehavior = "open" | "reveal" | "skip" | "open-pinned" | "open-background";
-export type WorkspaceLaunchApplicationBehavior = "launch" | "launch-minimized" | "reuse-existing" | "new-instance" | "skip-if-running";
+export type WorkspaceLaunchApplicationBehavior =
+  "launch" | "launch-minimized" | "reuse-existing" | "new-instance" | "skip-if-running";
 
 export interface WorkspaceLaunchApplicationItem {
   id: Identifier;
+  enabled?: boolean;
   kind: "application";
   applicationId: ApplicationId;
   behavior: WorkspaceLaunchApplicationBehavior;
@@ -57,6 +59,7 @@ export interface WorkspaceLaunchApplicationItem {
 
 export interface WorkspaceLaunchResourceItem {
   id: Identifier;
+  enabled?: boolean;
   kind: "resource";
   resourceId: ResourceId;
   behavior: WorkspaceLaunchResourceBehavior;
@@ -71,7 +74,45 @@ export interface WorkspaceLaunchSet {
   items: WorkspaceLaunchSetItem[];
   focusItemId?: Identifier;
   restoreInspector: boolean;
+  executionMode?: "sequential" | "parallel";
+  failureHandling?: "continue" | "stop" | "notify";
+  restoreBehavior?: "continuity-then-launch" | "launch-only" | "continuity-only";
+  notifyWhenReady?: boolean;
   updatedAt: Timestamp;
+}
+
+export interface WorkspaceSettings {
+  appearance: {
+    theme: "inherit" | "light" | "dark" | "focus";
+    accentColor: string;
+    banner: "none" | "subtle" | "solid";
+    wallpaper: "none" | "grid" | "ambient";
+    iconPack: "system" | "minimal" | "expressive";
+    backgroundBlur: "off" | "subtle" | "strong";
+  };
+  experience: {
+    defaultLanding: "overview" | "continue-working" | "resources" | "activity" | "relationships";
+    resourceDisplay: "grid" | "list";
+    resourceSort: "updated" | "title" | "type";
+    notificationPreference: "important" | "all" | "none";
+    searchPreference: "workspace" | "profile" | "global";
+    openBehavior: "restore-context" | "open-clean";
+  };
+  continuity: {
+    enabled: boolean;
+    restorePreference: "full-context" | "last-resource" | "workspace-only";
+    rankingPreference: "balanced" | "recency" | "modified" | "manual";
+    resourcePriority: "active" | "pinned" | "recent";
+    restoreLayout: boolean;
+  };
+  preferences: {
+    capturePreference: "workspace" | "profile-inbox";
+    relationshipPreference: "suggest" | "manual";
+    activityPreference: "meaningful" | "all";
+    searchContextBoost: "workspace" | "profile" | "none";
+    synchronizationPreference: "inherit" | "local-only";
+    offlinePreference: "local-first" | "online-when-available";
+  };
 }
 
 export interface WorkspacePermissions {
@@ -94,6 +135,7 @@ export interface WorkspaceProps {
   resourceRefs: ResourceId[];
   pinnedApplicationIds: ApplicationId[];
   launchSet?: WorkspaceLaunchSet;
+  settings?: WorkspaceSettings;
   activeSession?: WorkspaceSession;
   preservedSession?: WorkspaceSession;
   lifecycle: WorkspaceLifecycle;
@@ -124,6 +166,7 @@ export type WorkspaceDomainEvent =
   | DomainEvent<"WorkspaceResourceReferenceRemoved", { workspaceId: WorkspaceId; resourceId: ResourceId }>
   | DomainEvent<"WorkspaceLayoutUpdated", { workspaceId: WorkspaceId }>
   | DomainEvent<"WorkspaceLaunchSetUpdated", { workspaceId: WorkspaceId }>
+  | DomainEvent<"WorkspaceSettingsUpdated", { workspaceId: WorkspaceId }>
   | DomainEvent<"WorkspaceApplicationPinned", { workspaceId: WorkspaceId; applicationId: ApplicationId }>
   | DomainEvent<"WorkspaceApplicationUnpinned", { workspaceId: WorkspaceId; applicationId: ApplicationId }>;
 
@@ -133,6 +176,8 @@ export interface CreateWorkspaceRequest {
   profileId: string;
   owner: string;
   description?: string;
+  color?: string;
+  icon?: string;
   templateId?: string;
   createdBy?: string;
   occurredAt: string;

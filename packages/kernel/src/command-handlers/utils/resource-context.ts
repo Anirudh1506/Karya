@@ -1,11 +1,50 @@
 import type { ImportDestination, Resource } from "@karya/types";
 import type { KernelCommandContext } from "../../command-bus";
+import { DESKTOP_HOME_DEFAULT_SPACE_ID, DESKTOP_USER_ID } from "../../constants";
 
-const DESKTOP_HOME_DEFAULT_SPACE_ID = "workspace-desktop-home-default-space";
-const DESKTOP_USER_ID = "desktop-user";
+const ACTIVE_PROFILE_REQUIRED_ERROR = "Resource operations require an active Profile";
 
 export type CommandContext = KernelCommandContext;
 export type RegistryContext = Pick<KernelCommandContext, "registry">;
+
+export async function requireActiveResourceContext(context: RegistryContext) {
+  const [profile, workspace] = await Promise.all([
+    context.registry.resolve("profileService").getActiveProfile(),
+    context.registry.resolve("workspaceService").getActiveWorkspace(),
+  ]);
+  if (!profile) throw new Error(ACTIVE_PROFILE_REQUIRED_ERROR);
+  if (!workspace || workspace.lifecycleState === "archived" || workspace.lifecycleState === "deleted") {
+    throw new Error("Resource operations require an active Workspace");
+  }
+  const isDesktopDefaultSpace = workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID;
+  if (!isDesktopDefaultSpace && workspace.profileId !== profile.id) {
+    throw new Error("Active Workspace does not belong to the active Profile");
+  }
+  return {
+    defaultSpace: isDesktopDefaultSpace
+      ? ("user" as const)
+      : workspace.id === profile.defaultSpaceId
+        ? ("profile" as const)
+        : ("none" as const),
+    ownershipProfileId: isDesktopDefaultSpace ? DESKTOP_USER_ID : profile.id,
+    profile,
+    workspace,
+  };
+}
+
+export async function requireResourceInActiveWorkspace(resourceId: string, context: CommandContext) {
+  const [resource, active] = await Promise.all([
+    requireResource(resourceId, context),
+    requireActiveResourceContext(context),
+  ]);
+  if (!resource.workspaceRefs.includes(active.workspace.id)) {
+    throw new Error(`Resource does not belong to the active Workspace: ${resourceId}`);
+  }
+  if (resource.profileId !== active.ownershipProfileId) {
+    throw new Error(`Resource ownership does not match its Workspace: ${resourceId}`);
+  }
+  return { resource, ...active };
+}
 
 export async function resolveImportDestination(destination: ImportDestination | undefined, context: RegistryContext) {
   const workspaceService = context.registry.resolve("workspaceService");
@@ -27,25 +66,34 @@ export async function resolveImportDestination(destination: ImportDestination | 
     throw new Error(`Import destination workspace not available: ${destination.workspaceId}`);
   }
 
-  const explicitProfile = destination?.profileId
-    ? profiles.find((candidate) => candidate.id === destination.profileId)
-    : undefined;
+  const isDesktopDefaultSpace = destination?.defaultSpace === "user" || workspace?.id === DESKTOP_HOME_DEFAULT_SPACE_ID;
+  const explicitProfile =
+    !isDesktopDefaultSpace && destination?.profileId
+      ? profiles.find((candidate) => candidate.id === destination.profileId)
+      : undefined;
 
-  if (destination?.profileId && !explicitProfile) {
+  if (!isDesktopDefaultSpace && destination?.profileId && !explicitProfile) {
     throw new Error(`Import destination profile not found: ${destination.profileId}`);
   }
 
-  const isDesktopDefaultSpace = destination?.defaultSpace === "user" || workspace?.id === DESKTOP_HOME_DEFAULT_SPACE_ID;
   const profile = isDesktopDefaultSpace
     ? { id: DESKTOP_USER_ID }
-    : explicitProfile
-    ?? (workspace ? profiles.find((candidate) => candidate.id === workspace.profileId) : undefined)
-    ?? activeProfile;
+    : (explicitProfile ??
+      (workspace ? profiles.find((candidate) => candidate.id === workspace.profileId) : undefined) ??
+      activeProfile);
+
+  if (!profile) {
+    throw new Error(ACTIVE_PROFILE_REQUIRED_ERROR);
+  }
+  if (!isDesktopDefaultSpace && workspace && workspace.profileId !== profile.id) {
+    throw new Error(`Import destination Workspace does not belong to Profile: ${workspace.id}`);
+  }
 
   const profileDefaultSpaceId = profiles.find((candidate) => candidate.id === profile.id)?.defaultSpaceId;
   const workspaceRefs = workspace ? [workspace.id] : [];
-  const defaultSpace = destination?.defaultSpace
-    ?? (workspace && workspace.id === profileDefaultSpaceId ? "profile" : workspaceRefs.length ? "none" : "profile");
+  const defaultSpace =
+    destination?.defaultSpace ??
+    (workspace && workspace.id === profileDefaultSpaceId ? "profile" : workspaceRefs.length ? "none" : "profile");
 
   return {
     defaultSpace,
@@ -99,7 +147,10 @@ export function getResourcePath(resource: Awaited<ReturnType<typeof requireResou
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-export function readStringAttribute(resource: Awaited<ReturnType<typeof requireResource>>, key: string): string | undefined {
+export function readStringAttribute(
+  resource: Awaited<ReturnType<typeof requireResource>>,
+  key: string,
+): string | undefined {
   const value = resource.metadata.attributes?.[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

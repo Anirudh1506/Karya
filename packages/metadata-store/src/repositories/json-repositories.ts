@@ -15,12 +15,14 @@ export class SqliteJsonRepository<TEntity extends { id: EntityId }> implements R
   ) {}
 
   async list(): Promise<TEntity[]> {
-    return (this.database.prepare(`SELECT payload FROM ${this.table} ORDER BY ${this.orderBy}`).all() as PayloadRow[])
-      .map((row) => parseJson<TEntity>(row.payload));
+    return (
+      this.database.prepare(`SELECT payload FROM ${this.table} ORDER BY ${this.orderBy}`).all() as PayloadRow[]
+    ).map((row) => parseJson<TEntity>(row.payload));
   }
 
   async get(id: EntityId): Promise<TEntity | undefined> {
-    const row = this.database.prepare(`SELECT payload FROM ${this.table} WHERE id = ?`).get(id) as PayloadRow | undefined;
+    const row = this.database.prepare(`SELECT payload FROM ${this.table} WHERE id = ?`).get(id) as
+      PayloadRow | undefined;
     return row ? parseJson<TEntity>(row.payload) : undefined;
   }
 
@@ -33,14 +35,12 @@ export class SqliteJsonRepository<TEntity extends { id: EntityId }> implements R
   }
 }
 
-
-
 export function createProfileRepository(database: Database): ProfileRepository {
   return new SqliteJsonRepository<Profile>(
     database,
     "profiles",
     "name ASC",
-    (profile) => [profile.id, profile.name, profile.defaultSpaceId, profile.createdAt],
+    (profile) => [profile.id, profile.name, profile.defaultSpaceId ?? null, profile.createdAt],
     `
       INSERT INTO profiles (id, name, default_space_id, created_at, payload)
       VALUES (?, ?, ?, ?, ?)

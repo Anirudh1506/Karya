@@ -2,6 +2,13 @@ import type { FileSystemMetadata } from "@karya/platform";
 import { access, readdir, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
+import {
+  FALLBACK_MIME_TYPE,
+  FILE_SYSTEM_SEARCH_MAX_DEPTH,
+  MACOS_APPLICATION_EXTENSION,
+  MIME_TYPE_BY_EXTENSION,
+  TEXT_READABLE_EXTENSIONS,
+} from "./constants";
 
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -38,7 +45,7 @@ export async function findFileSystemMetadataById(
 ): Promise<FileSystemMetadata | undefined> {
   const seen = new Set<string>();
   for (const root of searchRoots.filter(Boolean)) {
-    const found = await findFileSystemMetadataByIdInTree(root, fileSystemId, 4, seen);
+    const found = await findFileSystemMetadataByIdInTree(root, fileSystemId, FILE_SYSTEM_SEARCH_MAX_DEPTH, seen);
     if (found) return found;
   }
   return undefined;
@@ -70,7 +77,7 @@ async function findFileSystemMetadataByIdInTree(
     const childPath = join(root, entry.name);
     const childMetadata = await getFileSystemMetadata(childPath);
     if (childMetadata?.fileSystemId === fileSystemId) return childMetadata;
-    if (entry.isDirectory() && !entry.name.endsWith(".app")) {
+    if (entry.isDirectory() && !entry.name.endsWith(MACOS_APPLICATION_EXTENSION)) {
       const found = await findFileSystemMetadataByIdInTree(childPath, fileSystemId, depth - 1, seen);
       if (found) return found;
     }
@@ -80,25 +87,12 @@ async function findFileSystemMetadataByIdInTree(
 }
 
 function inferMimeType(extension: string | undefined): string {
-  if (!extension) return "application/octet-stream";
-  const mimeTypes: Record<string, string> = {
-    csv: "text/csv",
-    gif: "image/gif",
-    htm: "text/html",
-    html: "text/html",
-    jpeg: "image/jpeg",
-    jpg: "image/jpeg",
-    json: "application/json",
-    md: "text/markdown",
-    pdf: "application/pdf",
-    png: "image/png",
-    txt: "text/plain",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  };
-  return mimeTypes[extension] ?? "application/octet-stream";
+  if (!extension) return FALLBACK_MIME_TYPE;
+  return MIME_TYPE_BY_EXTENSION[extension] ?? FALLBACK_MIME_TYPE;
 }
 
 export function isTextReadableExtension(extension: string | undefined): boolean {
-  return Boolean(extension && ["md", "markdown", "txt", "rtf"].includes(extension));
+  return Boolean(
+    extension && TEXT_READABLE_EXTENSIONS.includes(extension as (typeof TEXT_READABLE_EXTENSIONS)[number]),
+  );
 }

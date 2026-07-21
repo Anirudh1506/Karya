@@ -5,21 +5,47 @@ import type { ApplicationRepository } from "@karya/application-registry";
 import type { ResourceQueryRepository, SearchQueryRepository, WorkspaceQueryRepository } from "@karya/query-service";
 import type {
   PersistenceProvider,
+  ActivityRepository,
+  NotificationRepository,
   ProfileRepository,
   ResourceRepository,
   SearchDocumentRepository,
   SessionRepository,
   SettingsRepository,
   WorkspaceRepository,
+  SyncOperationRepository,
+  Repository,
 } from "@karya/persistence";
-import type { ResourceRepository as DomainResourceRepository, WorkspaceRepository as DomainWorkspaceRepository } from "@karya/domain";
+import type {
+  ResourceRepository as DomainResourceRepository,
+  WorkspaceRepository as DomainWorkspaceRepository,
+} from "@karya/domain";
 import { Identifier } from "@karya/domain";
-import type { EntityId, InstalledApplication, Profile, Resource, SettingDefinition, Workspace } from "@karya/types";
+import type {
+  EditableResourceContent,
+  EditCheckpoint,
+  EditSession,
+  EntityId,
+  InstalledApplication,
+  Profile,
+  Resource,
+  SettingDefinition,
+  Workspace,
+  SyncConflict,
+  SyncDeviceState,
+  SyncOperation,
+  SyncReplayReceipt,
+  KaryaAccount,
+  TrustedDevice,
+  TransportSessionRecord,
+} from "@karya/types";
 import { toDto as resourceToDto, toDomain as resourceToDomain } from "@karya/resource-service";
 import { toDto as workspaceToDto, toDomain as workspaceToDomain } from "@karya/workspace-service";
 import { migrateMetadataStore } from "./schema";
 import {
   SqliteApplicationRepository,
+  SqliteActivityRepository,
+  SqliteNotificationRepository,
   SqliteResourceRepository,
   SqliteSearchDocumentRepository,
   SqliteSessionRepository,
@@ -27,7 +53,11 @@ import {
   createProfileRepository,
   createSettingsRepository,
 } from "./repositories";
-import { SqliteResourceQueryRepository, SqliteSearchQueryRepository, SqliteWorkspaceQueryRepository } from "./query-repositories";
+import {
+  SqliteResourceQueryRepository,
+  SqliteSearchQueryRepository,
+  SqliteWorkspaceQueryRepository,
+} from "./query-repositories";
 
 export interface MetadataStoreOptions {
   databasePath: string;
@@ -44,7 +74,19 @@ export interface MetadataStoreSeed {
 
 export class KaryaMetadataStore implements PersistenceProvider {
   private readonly database: SqliteDatabase;
+  readonly accounts: Repository<KaryaAccount>;
+  readonly trustedDevices: Repository<TrustedDevice>;
+  readonly transportSessions: Repository<TransportSessionRecord>;
   readonly aggregateResources: DomainResourceRepository;
+  readonly activities: ActivityRepository;
+  readonly notifications: NotificationRepository;
+  readonly syncOperations: SyncOperationRepository;
+  readonly syncDeviceStates: Repository<SyncDeviceState>;
+  readonly syncReplayReceipts: Repository<SyncReplayReceipt>;
+  readonly syncConflicts: Repository<SyncConflict>;
+  readonly editableContents: Repository<EditableResourceContent>;
+  readonly editCheckpoints: Repository<EditCheckpoint>;
+  readonly editSessions: Repository<EditSession>;
   readonly aggregateWorkspaces: DomainWorkspaceRepository;
   readonly applications: ApplicationRepository;
   readonly profiles: ProfileRepository;
@@ -59,7 +101,19 @@ export class KaryaMetadataStore implements PersistenceProvider {
 
   constructor(options: MetadataStoreOptions) {
     this.database = Database(options.databasePath);
+    this.accounts = createEditingRepository<KaryaAccount>(this.database, "accounts");
+    this.trustedDevices = createEditingRepository<TrustedDevice>(this.database, "trusted_devices");
+    this.transportSessions = createEditingRepository<TransportSessionRecord>(this.database, "transport_sessions");
     this.aggregateResources = new SqliteResourceRepository(this.database);
+    this.activities = new SqliteActivityRepository(this.database);
+    this.notifications = new SqliteNotificationRepository(this.database);
+    this.syncOperations = new SqliteSyncOperationRepository(this.database);
+    this.syncDeviceStates = createEditingRepository<SyncDeviceState>(this.database, "sync_device_states");
+    this.syncReplayReceipts = createEditingRepository<SyncReplayReceipt>(this.database, "sync_replay_receipts");
+    this.syncConflicts = createEditingRepository<SyncConflict>(this.database, "sync_conflicts");
+    this.editableContents = createEditingRepository<EditableResourceContent>(this.database, "editable_contents");
+    this.editCheckpoints = createEditingRepository<EditCheckpoint>(this.database, "edit_checkpoints");
+    this.editSessions = createEditingRepository<EditSession>(this.database, "edit_sessions");
     this.aggregateWorkspaces = new SqliteWorkspaceRepository(this.database);
     this.applications = new SqliteApplicationRepository(this.database);
     this.profiles = createProfileRepository(this.database);
@@ -85,21 +139,33 @@ export class KaryaMetadataStore implements PersistenceProvider {
       await Promise.all(seed.profiles.map((profile) => this.profiles.save(profile)));
     } else {
       const existingIds = new Set(existingProfiles.map((profile) => profile.id));
-      await Promise.all(seed.profiles.filter((profile) => !existingIds.has(profile.id)).map((profile) => this.profiles.save(profile)));
+      await Promise.all(
+        seed.profiles.filter((profile) => !existingIds.has(profile.id)).map((profile) => this.profiles.save(profile)),
+      );
     }
     const existingResources = await this.aggregateResources.list();
     if (existingResources.length === 0) {
       await Promise.all(seed.resources.map((resource) => this.aggregateResources.save(resourceToDomain(resource))));
     } else {
       const existingIds = new Set(existingResources.map((resource) => resource.toSnapshot().id.value));
-      await Promise.all(seed.resources.filter((resource) => !existingIds.has(resource.id)).map((resource) => this.aggregateResources.save(resourceToDomain(resource))));
+      await Promise.all(
+        seed.resources
+          .filter((resource) => !existingIds.has(resource.id))
+          .map((resource) => this.aggregateResources.save(resourceToDomain(resource))),
+      );
     }
     const existingWorkspaces = await this.aggregateWorkspaces.list();
     if (existingWorkspaces.length === 0) {
-      await Promise.all(seed.workspaces.map((workspace) => this.aggregateWorkspaces.save(workspaceToDomain(workspace))));
+      await Promise.all(
+        seed.workspaces.map((workspace) => this.aggregateWorkspaces.save(workspaceToDomain(workspace))),
+      );
     } else {
       const existingIds = new Set(existingWorkspaces.map((workspace) => workspace.toSnapshot().id.value));
-      await Promise.all(seed.workspaces.filter((workspace) => !existingIds.has(workspace.id)).map((workspace) => this.aggregateWorkspaces.save(workspaceToDomain(workspace))));
+      await Promise.all(
+        seed.workspaces
+          .filter((workspace) => !existingIds.has(workspace.id))
+          .map((workspace) => this.aggregateWorkspaces.save(workspaceToDomain(workspace))),
+      );
     }
     await this.normalizeDesktopDefaultSpace(seed);
     const existingApplications = await this.applications.list();
@@ -107,26 +173,46 @@ export class KaryaMetadataStore implements PersistenceProvider {
       await Promise.all(seed.applications.map((application) => this.applications.save(application)));
     } else {
       const existingIds = new Set(existingApplications.map((application) => application.metadata.id));
-      await Promise.all(seed.applications.filter((application) => !existingIds.has(application.metadata.id)).map((application) => this.applications.save(application)));
+      await Promise.all(
+        seed.applications
+          .filter((application) => !existingIds.has(application.metadata.id))
+          .map((application) => this.applications.save(application)),
+      );
     }
     const existingSettings = await this.settings.list();
     if (existingSettings.length === 0) {
       await Promise.all(seed.settings.map((setting) => this.settings.save(setting)));
     } else {
       const existingIds = new Set(existingSettings.map((setting) => setting.id));
-      await Promise.all(seed.settings.filter((setting) => !existingIds.has(setting.id)).map((setting) => this.settings.save(setting)));
+      await Promise.all(
+        seed.settings.filter((setting) => !existingIds.has(setting.id)).map((setting) => this.settings.save(setting)),
+      );
     }
-    if (!(await this.sessions.getCurrent())) {
+    const currentSession = await this.sessions.getCurrent();
+    const currentProfileExists = currentSession
+      ? Boolean(await this.profiles.get(currentSession.activeProfileId))
+      : false;
+    const currentWorkspaceExists = currentSession?.activeWorkspaceId
+      ? Boolean(await this.workspaces.get(currentSession.activeWorkspaceId))
+      : true;
+    if (!currentSession || !currentProfileExists || !currentWorkspaceExists) {
       await this.sessions.saveCurrent(seed.session);
     }
   }
 
   private async normalizeDesktopDefaultSpace(seed: MetadataStoreSeed): Promise<void> {
-    const desktopDefaultSpace = seed.workspaces.find((workspace) => workspace.id === "workspace-desktop-home-default-space");
+    const desktopDefaultSpace = seed.workspaces.find(
+      (workspace) => workspace.id === "workspace-desktop-home-default-space",
+    );
     if (!desktopDefaultSpace) return;
 
     const existingWorkspace = await this.workspaces.get(desktopDefaultSpace.id);
-    if (existingWorkspace && (existingWorkspace.profileId !== desktopDefaultSpace.profileId || existingWorkspace.owner !== desktopDefaultSpace.owner || existingWorkspace.name !== desktopDefaultSpace.name)) {
+    if (
+      existingWorkspace &&
+      (existingWorkspace.profileId !== desktopDefaultSpace.profileId ||
+        existingWorkspace.owner !== desktopDefaultSpace.owner ||
+        existingWorkspace.name !== desktopDefaultSpace.name)
+    ) {
       await this.workspaces.save({
         ...existingWorkspace,
         name: desktopDefaultSpace.name,
@@ -144,20 +230,29 @@ export class KaryaMetadataStore implements PersistenceProvider {
     }
 
     const resources = await this.resources.list();
-    await Promise.all(resources
-      .filter((resource) => resource.defaultSpace === "user" || resource.workspaceRefs.includes(desktopDefaultSpace.id))
-      .filter((resource) => resource.profileId !== desktopDefaultSpace.profileId || resource.owner !== desktopDefaultSpace.owner)
-      .map((resource) => this.resources.save({
-        ...resource,
-        owner: desktopDefaultSpace.owner,
-        profileId: desktopDefaultSpace.profileId,
-        updatedAt: new Date().toISOString(),
-        metadata: {
-          ...resource.metadata,
-          updatedAt: new Date().toISOString(),
-          updatedBy: desktopDefaultSpace.owner,
-        },
-      })));
+    await Promise.all(
+      resources
+        .filter(
+          (resource) => resource.defaultSpace === "user" || resource.workspaceRefs.includes(desktopDefaultSpace.id),
+        )
+        .filter(
+          (resource) =>
+            resource.profileId !== desktopDefaultSpace.profileId || resource.owner !== desktopDefaultSpace.owner,
+        )
+        .map((resource) =>
+          this.resources.save({
+            ...resource,
+            owner: desktopDefaultSpace.owner,
+            profileId: desktopDefaultSpace.profileId,
+            updatedAt: new Date().toISOString(),
+            metadata: {
+              ...resource.metadata,
+              updatedAt: new Date().toISOString(),
+              updatedBy: desktopDefaultSpace.owner,
+            },
+          }),
+        ),
+    );
   }
 
   transaction<TResult>(operation: () => TResult): TResult {
@@ -188,6 +283,91 @@ export class KaryaMetadataStore implements PersistenceProvider {
     if (result !== "ok") {
       throw new Error(`Metadata store integrity check failed: ${result}`);
     }
+  }
+}
+
+function createEditingRepository<TEntity extends { id: EntityId }>(
+  database: SqliteDatabase,
+  table: string,
+): Repository<TEntity> {
+  return {
+    async list() {
+      return (
+        database.prepare(`SELECT payload FROM ${table} ORDER BY updated_at ASC, id ASC`).all() as Array<{
+          payload: string;
+        }>
+      ).map((row) => JSON.parse(row.payload) as TEntity);
+    },
+    async get(id) {
+      const row = database.prepare(`SELECT payload FROM ${table} WHERE id = ?`).get(id) as
+        { payload: string } | undefined;
+      return row ? (JSON.parse(row.payload) as TEntity) : undefined;
+    },
+    async save(entity) {
+      database
+        .prepare(
+          `INSERT INTO ${table} (id, updated_at, payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, payload = excluded.payload`,
+        )
+        .run(entity.id, new Date().toISOString(), JSON.stringify(entity));
+    },
+    async delete(id) {
+      database.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    },
+  };
+}
+
+class SqliteSyncOperationRepository implements SyncOperationRepository {
+  constructor(private readonly database: SqliteDatabase) {}
+  async append(operation: SyncOperation): Promise<boolean> {
+    const result = this.database
+      .prepare(
+        `INSERT OR IGNORE INTO sync_operations (id, device_id, sequence, timestamp, acknowledgement_state, payload) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        operation.id,
+        operation.deviceId,
+        operation.sequence,
+        operation.timestamp,
+        operation.acknowledgementState,
+        JSON.stringify(operation),
+      );
+    return result.changes > 0;
+  }
+  async get(id: EntityId) {
+    const row = this.database.prepare("SELECT payload FROM sync_operations WHERE id = ?").get(id) as
+      { payload: string } | undefined;
+    return row ? (JSON.parse(row.payload) as SyncOperation) : undefined;
+  }
+  async list(state?: SyncOperation["acknowledgementState"]) {
+    const rows = (
+      state
+        ? this.database
+            .prepare(
+              "SELECT payload FROM sync_operations WHERE acknowledgement_state = ? ORDER BY timestamp, device_id, sequence, id",
+            )
+            .all(state)
+        : this.database.prepare("SELECT payload FROM sync_operations ORDER BY timestamp, device_id, sequence, id").all()
+    ) as Array<{ payload: string }>;
+    return rows.map((row) => JSON.parse(row.payload) as SyncOperation);
+  }
+  async updateAcknowledgement(
+    id: EntityId,
+    state: SyncOperation["acknowledgementState"],
+    at?: string,
+    reason?: string,
+  ) {
+    const current = await this.get(id);
+    if (!current) throw new Error(`Sync operation not found: ${id}`);
+    const updated: SyncOperation = {
+      ...current,
+      acknowledgementState: state,
+      acknowledgedAt: state === "acknowledged" ? at : current.acknowledgedAt,
+      failureReason: reason,
+    };
+    this.database
+      .prepare("UPDATE sync_operations SET acknowledgement_state = ?, payload = ? WHERE id = ?")
+      .run(state, JSON.stringify(updated), id);
+    return updated;
   }
 }
 

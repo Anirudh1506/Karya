@@ -1,6 +1,5 @@
-import type { Resource } from "@karya/types";
+import { fileNameFromPath, parentPath, type Resource } from "@karya/types";
 import type { CommandBus } from "../../command-bus";
-import { basename, dirname } from "node:path";
 import {
   assertPathAvailable,
   checkResourceAvailability,
@@ -35,27 +34,44 @@ import {
   updateNativeCalendarEvent,
   updateNativeTask,
 } from "../helpers";
+import {
+  ACTIVE_PROFILE_REQUIRED_ERROR,
+  PROFILE_NAME_REQUIRED_ERROR,
+  DESKTOP_HOME_DEFAULT_SPACE_ID,
+  WORKSPACE_NAME_REQUIRED_ERROR,
+} from "../../constants";
 
 export function registerWorkspaceProfileApplicationCommandHandlers(commandBus: CommandBus): void {
-commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
-    const profile = await registry.resolve("profileService").getActiveProfile();
-    return registry.resolve("workspaceService").create({
-      name: command.payload.name,
+  commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
+    const name = command.payload.name.trim();
+    if (!name) throw new Error(WORKSPACE_NAME_REQUIRED_ERROR);
+    const profile = await requireActiveProfile(registry.resolve("profileService").getActiveProfile());
+    const workspace = await registry.resolve("workspaceService").create({
+      name,
       profileId: profile.id,
       owner: profile.id,
       description: command.payload.description,
+      color: command.payload.color,
+      icon: command.payload.icon,
       templateId: command.payload.templateId,
     });
+    await registry.resolve("continuityService").openWorkspaceSession(workspace.id, profile.id);
+    return workspace;
   });
 
   commandBus.register("OpenWorkspaceCommand", async (command, { registry }) => {
-    const workspace = (await registry.resolve("workspaceService").listWorkspaces())
-      .find((candidate) => candidate.id === command.payload.workspaceId);
-    if (!workspace || workspace.lifecycleState === "deleted") {
+    const workspace = (await registry.resolve("workspaceService").listWorkspaces()).find(
+      (candidate) => candidate.id === command.payload.workspaceId,
+    );
+    if (!workspace || workspace.lifecycleState === "archived" || workspace.lifecycleState === "deleted") {
       throw new Error(`Workspace is not available: ${command.payload.workspaceId}`);
     }
+    const activeProfile = await requireActiveProfile(registry.resolve("profileService").getActiveProfile());
+    const isDesktopHomeDefaultSpace = workspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID;
+    if (!isDesktopHomeDefaultSpace && workspace.profileId !== activeProfile.id) {
+      throw new Error(`Workspace does not belong to the active profile: ${command.payload.workspaceId}`);
+    }
     const opened = await registry.resolve("workspaceService").open(command.payload.workspaceId);
-    await registry.resolve("continuityService").openWorkspaceSession(opened.id, opened.profileId);
     return opened;
   });
 
@@ -72,6 +88,13 @@ commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
   });
 
   commandBus.register("RestoreWorkspaceCommand", async (command, { registry }) => {
+    const workspace = (await registry.resolve("workspaceService").listWorkspaces()).find(
+      (candidate) => candidate.id === command.payload.workspaceId,
+    );
+    const activeProfile = await requireActiveProfile(registry.resolve("profileService").getActiveProfile());
+    if (!workspace || workspace.profileId !== activeProfile.id) {
+      throw new Error(`Workspace does not belong to the active profile: ${command.payload.workspaceId}`);
+    }
     return registry.resolve("workspaceService").restore(command.payload.workspaceId);
   });
 
@@ -89,28 +112,24 @@ commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
     return registry.resolve("workspaceService").updateLaunchSet(command.payload.workspaceId, command.payload.launchSet);
   });
 
+  commandBus.register("UpdateWorkspaceSettingsCommand", async (command, { registry }) => {
+    return registry.resolve("workspaceService").updateSettings(command.payload.workspaceId, command.payload.update);
+  });
+
   commandBus.register("CreateProfileCommand", async (command, { registry }) => {
+    if (!command.payload.name.trim()) throw new Error(PROFILE_NAME_REQUIRED_ERROR);
     const profile = await registry.resolve("profileService").create(command.payload);
-    const defaultSpace = await registry.resolve("workspaceService").create({
-      name: "Default Space",
-      profileId: profile.id,
-      owner: profile.id,
-      description: `Default space for ${profile.name}`,
-    });
-    await registry.resolve("profileService").update({
-      id: profile.id,
-      defaultSpaceId: defaultSpace.id,
-      spaceIds: [defaultSpace.id],
-    });
-    return registry.resolve("profileService").activateProfile(profile.id);
+    return registry.resolve("profileService").activateProfile(profile.id, false);
   });
 
   commandBus.register("OpenProfileCommand", async (command, { registry }) => {
-    return registry.resolve("profileService").activateProfile(command.payload.profileId);
+    return registry.resolve("profileService").activateProfile(command.payload.profileId, false);
   });
 
   commandBus.register("ViewProfileCommand", async (command, { registry, publish }) => {
-    const profile = (await registry.resolve("profileService").listProfiles()).find((candidate) => candidate.id === command.payload.profileId);
+    const profile = (await registry.resolve("profileService").listProfiles()).find(
+      (candidate) => candidate.id === command.payload.profileId,
+    );
     if (!profile || profile.lifecycleState === "deleted") {
       throw new Error(`Profile not found: ${command.payload.profileId}`);
     }
@@ -151,10 +170,11 @@ commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
   });
 
   commandBus.register("LaunchApplicationCommand", async (command, { registry }) => {
-    const [profile, workspace] = await Promise.all([
+    const [profileResult, workspace] = await Promise.all([
       registry.resolve("profileService").getActiveProfile(),
       registry.resolve("workspaceService").getActiveWorkspace(),
     ]);
+    const profile = await requireActiveProfile(Promise.resolve(profileResult));
 
     return registry.resolve("applicationRegistry").launchApplication({
       applicationId: command.payload.applicationId,
@@ -195,14 +215,20 @@ commandBus.register("CreateWorkspaceCommand", async (command, { registry }) => {
   });
 
   commandBus.register("SetDefaultApplicationCommand", async (command, { registry }) => {
-    return registry.resolve("applicationRegistry").setDefaultApplication(command.payload.applicationId, command.payload.isDefault);
+    return registry
+      .resolve("applicationRegistry")
+      .setDefaultApplication(command.payload.applicationId, command.payload.isDefault);
   });
 
   commandBus.register("SetWorkspacePreferredApplicationCommand", async (command, { registry }) => {
-    return registry.resolve("workspaceService").setPreferredApplication(
-      command.payload.workspaceId,
-      command.payload.applicationId,
-      command.payload.preferred,
-    );
+    return registry
+      .resolve("workspaceService")
+      .setPreferredApplication(command.payload.workspaceId, command.payload.applicationId, command.payload.preferred);
   });
+}
+
+async function requireActiveProfile(profile: Promise<import("@karya/types").Profile | undefined>) {
+  const activeProfile = await profile;
+  if (!activeProfile) throw new Error(ACTIVE_PROFILE_REQUIRED_ERROR);
+  return activeProfile;
 }

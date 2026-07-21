@@ -1,10 +1,12 @@
 import type {
   ApplicationProvider,
+  CameraProvider,
   ClipboardProvider,
   DownloadProvider,
   FileSystemProvider,
   NotificationProvider,
   PlatformProviders,
+  SecureStorageProvider,
   WebProvider,
   WindowProvider,
 } from "./contracts";
@@ -29,6 +31,15 @@ export class NoopPlatformProviders implements PlatformProviders {
     async openExternal() {},
     async launch() {},
     async openFile() {},
+  };
+
+  camera: CameraProvider = {
+    async isAvailable() {
+      return false;
+    },
+    async capture() {
+      return undefined;
+    },
   };
 
   clipboard: ClipboardProvider = {
@@ -70,6 +81,14 @@ export class NoopPlatformProviders implements PlatformProviders {
 
   notifications: NotificationProvider = {
     async notify() {},
+  };
+
+  secureStorage: SecureStorageProvider = {
+    async get() {
+      return undefined;
+    },
+    async set() {},
+    async remove() {},
   };
 
   web: WebProvider = {

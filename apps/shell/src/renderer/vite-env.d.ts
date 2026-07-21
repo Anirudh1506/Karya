@@ -4,7 +4,11 @@ interface Window {
   karyaShell?: {
     platform: NodeJS.Platform;
     invoke<TResponse = unknown>(method: string, args?: unknown[]): Promise<TResponse>;
-    showProfileContextMenu?(profile: { id: string; name: string; archived: boolean }): Promise<
+    showProfileContextMenu?(profile: {
+      id: string;
+      name: string;
+      archived: boolean;
+    }): Promise<
       | "open"
       | "rename"
       | "create-workspace"
@@ -15,10 +19,21 @@ interface Window {
       | "properties"
       | undefined
     >;
-    showResourceContextMenu?(resource: { id: string; title: string; archived: boolean; hasLocation: boolean }): Promise<
+    showResourceContextMenu?(resource: {
+      id: string;
+      title: string;
+      archived: boolean;
+      hasLocation: boolean;
+      referencedFolder: boolean;
+      canOpenInCode: boolean;
+    }): Promise<
       | "open"
       | "open-with"
       | "reveal"
+      | "open-in-code"
+      | "copy-path"
+      | "remove-reference"
+      | "show-metadata"
       | "rename"
       | "duplicate"
       | "move"
@@ -29,7 +44,14 @@ interface Window {
       | "properties"
       | undefined
     >;
-    showApplicationContextMenu?(application: { id: string; name: string; pinned: boolean; favorite: boolean; preferred: boolean; hasActiveWorkspace: boolean }): Promise<
+    showApplicationContextMenu?(application: {
+      id: string;
+      name: string;
+      pinned: boolean;
+      favorite: boolean;
+      preferred: boolean;
+      hasActiveWorkspace: boolean;
+    }): Promise<
       | "launch"
       | "open-workspace"
       | "pin"

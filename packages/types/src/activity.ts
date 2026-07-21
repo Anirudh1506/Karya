@@ -2,13 +2,7 @@ import type { EntityId, ISODateString } from "./common";
 import type { RelationshipObjectType } from "./resource";
 
 export type ActivityObjectType =
-  | RelationshipObjectType
-  | "workspace"
-  | "profile"
-  | "application"
-  | "import"
-  | "notification"
-  | "system";
+  RelationshipObjectType | "workspace" | "profile" | "application" | "import" | "notification" | "system";
 
 export type ActivityCategory =
   | "resource"
@@ -53,6 +47,7 @@ export interface ActivityObjectReference {
 
 export interface KaryaActivity {
   id: EntityId;
+  eventType: string;
   category: ActivityCategory;
   verb: ActivityVerb;
   title: string;
@@ -62,6 +57,11 @@ export interface KaryaActivity {
   profileId?: EntityId;
   workspaceId?: EntityId;
   applicationId?: EntityId;
+  actor: {
+    id: EntityId;
+    type: "local-user";
+    name?: string;
+  };
   source: string;
   groupKey: string;
   groupCount: number;

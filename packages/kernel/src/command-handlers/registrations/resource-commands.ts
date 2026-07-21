@@ -1,6 +1,6 @@
-import type { Resource } from "@karya/types";
+import { fileNameFromPath, parentPath, type Resource } from "@karya/types";
 import type { CommandBus } from "../../command-bus";
-import { basename, dirname } from "node:path";
+import { DESKTOP_HOME_DEFAULT_SPACE_ID, DESKTOP_USER_ID } from "../../constants";
 import {
   assertPathAvailable,
   checkResourceAvailability,
@@ -27,6 +27,8 @@ import {
   recordResourceNavigation,
   registryUpdateMetadata,
   requireResource,
+  requireActiveResourceContext,
+  requireResourceInActiveWorkspace,
   requireResourcePath,
   resolveImportDestination,
   summarizeNote,
@@ -37,6 +39,18 @@ import {
 } from "../helpers";
 
 export function registerResourceCommandHandlers(commandBus: CommandBus): void {
+  commandBus.register("BeginCaptureCommand", (command, context) =>
+    context.registry.resolve("captureService").begin(command.payload.kind),
+  );
+
+  commandBus.register("CompleteCaptureCommand", (command, context) =>
+    context.registry.resolve("captureService").complete(command.payload),
+  );
+
+  commandBus.register("CancelCaptureCommand", (command, context) =>
+    context.registry.resolve("captureService").cancel(command.payload.captureId),
+  );
+
   commandBus.register("CreateRelationshipCommand", async (command, context) => {
     await context.registry.resolve("relationshipService").createRelationship({
       source: { id: command.payload.sourceId, type: command.payload.sourceType },
@@ -48,10 +62,12 @@ export function registerResourceCommandHandlers(commandBus: CommandBus): void {
   });
 
   commandBus.register("RemoveRelationshipCommand", async (command, context) => {
-    await context.registry.resolve("relationshipService").removeRelationship(
-      { id: command.payload.sourceId, type: command.payload.sourceType },
-      command.payload.relationshipId,
-    );
+    await context.registry
+      .resolve("relationshipService")
+      .removeRelationship(
+        { id: command.payload.sourceId, type: command.payload.sourceType },
+        command.payload.relationshipId,
+      );
     await context.publish("RelationshipRemoved", command.payload);
     await context.publish("relationship:removed", command.payload);
   });
@@ -76,17 +92,25 @@ export function registerResourceCommandHandlers(commandBus: CommandBus): void {
     return context.registry.resolve("notificationService").scheduleReminder(command.payload);
   });
 
-commandBus.register("OpenResourceCommand", async (command, context) => {
+  commandBus.register("OpenResourceCommand", async (command, context) => {
+    await requireResourceInActiveWorkspace(command.payload.resourceId, context);
     return openResourceById(command.payload.resourceId, context);
   });
 
   commandBus.register("OpenResourceWithApplicationCommand", async (command, context) => {
-    return openResourceWithApplication(command.payload.resourceId, command.payload.applicationId, command.payload.workspaceId, context);
+    return openResourceWithApplication(
+      command.payload.resourceId,
+      command.payload.applicationId,
+      command.payload.workspaceId,
+      context,
+    );
   });
 
   commandBus.register("RevealResourceCommand", async (command, context) => {
     const initialResource = await requireResource(command.payload.resourceId, context);
-    const resource = isLinkedResource(initialResource) ? await syncLinkedResource(initialResource, context) : initialResource;
+    const resource = isLinkedResource(initialResource)
+      ? await syncLinkedResource(initialResource, context)
+      : initialResource;
     const path = requireResourcePath(resource);
     await assertPathAvailable(resource, path, context);
     await context.platform?.fileSystem.revealPath(path);
@@ -95,7 +119,9 @@ commandBus.register("OpenResourceCommand", async (command, context) => {
 
   commandBus.register("OpenContainingFolderCommand", async (command, context) => {
     const initialResource = await requireResource(command.payload.resourceId, context);
-    const resource = isLinkedResource(initialResource) ? await syncLinkedResource(initialResource, context) : initialResource;
+    const resource = isLinkedResource(initialResource)
+      ? await syncLinkedResource(initialResource, context)
+      : initialResource;
     const path = requireResourcePath(resource);
     const exists = await context.platform?.fileSystem.exists(path);
     if (!exists) {
@@ -133,25 +159,54 @@ commandBus.register("OpenResourceCommand", async (command, context) => {
     return registryUpdateMetadata(context, resource.id, {
       attributes: {
         ...(resource.metadata.attributes ?? {}),
-        ...(metadata ? createLinkedResourceAttributes(metadata, command.payload.path) : {
-          contentSourcePath: command.payload.path,
-          contentContainingDirectory: dirname(command.payload.path),
-          resourceHealth: "moved",
-          resourceLocationKind: "local",
-          resourceLastVerifiedAt: new Date().toISOString(),
-        }),
+        ...(metadata
+          ? createLinkedResourceAttributes(metadata, command.payload.path)
+          : {
+              contentSourcePath: command.payload.path,
+              contentContainingDirectory: parentPath(command.payload.path),
+              resourceHealth: "moved",
+              resourceLocationKind: "local",
+              resourceLastVerifiedAt: new Date().toISOString(),
+            }),
         resourceHealth: "moved",
       },
     });
   });
 
-  commandBus.register("RenameResourceCommand", async (command, { registry }) => {
+  commandBus.register("RenameResourceCommand", async (command, context) => {
+    await requireResourceInActiveWorkspace(command.payload.resourceId, context);
+    const { registry } = context;
     return registry.resolve("resourceService").rename(command.payload.resourceId, command.payload.title);
   });
 
   commandBus.register("MoveResourceCommand", async (command, context) => {
     const resource = await requireResource(command.payload.resourceId, context);
+    const sourceWorkspaceId = resource.primaryWorkspaceId ?? resource.workspaceRefs[0];
+    if (!sourceWorkspaceId) throw new Error("Resource moves require a source Workspace");
+    const sourceWorkspace = (await context.registry.resolve("workspaceService").listWorkspaces()).find(
+      (workspace) => workspace.id === sourceWorkspaceId,
+    );
+    if (
+      !sourceWorkspace ||
+      sourceWorkspace.lifecycleState === "archived" ||
+      sourceWorkspace.lifecycleState === "deleted"
+    ) {
+      throw new Error(`Resource source Workspace is not available: ${sourceWorkspaceId}`);
+    }
+    const expectedSourceProfileId =
+      sourceWorkspace.id === DESKTOP_HOME_DEFAULT_SPACE_ID ? DESKTOP_USER_ID : sourceWorkspace.profileId;
+    if (resource.profileId !== expectedSourceProfileId || !resource.workspaceRefs.includes(sourceWorkspace.id)) {
+      throw new Error(`Resource ownership does not match its source Workspace: ${resource.id}`);
+    }
     const destination = await resolveImportDestination(command.payload.destination, context);
+    if (!destination.primaryWorkspaceId) throw new Error("Resource moves require a destination Workspace");
+    if (
+      destination.primaryWorkspaceId === sourceWorkspace.id &&
+      destination.profileId === resource.profileId &&
+      destination.defaultSpace === resource.defaultSpace
+    ) {
+      return resource;
+    }
     const moved = await context.registry.resolve("resourceService").update({
       id: resource.id,
       owner: destination.profileId,
@@ -169,6 +224,7 @@ commandBus.register("OpenResourceCommand", async (command, context) => {
       fromWorkspaceIds: resource.workspaceRefs,
       toWorkspaceIds: moved.workspaceRefs,
     });
+    await context.publish("ResourceSelected", { resourceId: undefined });
     return moved;
   });
 
@@ -207,11 +263,15 @@ commandBus.register("OpenResourceCommand", async (command, context) => {
     await registry.resolve("resourceService").delete(command.payload.resourceId);
   });
 
-  commandBus.register("ArchiveResourceCommand", async (command, { registry }) => {
+  commandBus.register("ArchiveResourceCommand", async (command, context) => {
+    await requireResourceInActiveWorkspace(command.payload.resourceId, context);
+    const { registry } = context;
     await registry.resolve("resourceService").archive(command.payload.resourceId);
   });
 
-  commandBus.register("RestoreResourceCommand", async (command, { registry }) => {
+  commandBus.register("RestoreResourceCommand", async (command, context) => {
+    await requireResourceInActiveWorkspace(command.payload.resourceId, context);
+    const { registry } = context;
     return registry.resolve("resourceService").restore(command.payload.resourceId);
   });
 
@@ -237,9 +297,9 @@ commandBus.register("OpenResourceCommand", async (command, context) => {
     return resource;
   });
 
-  commandBus.register("UpdateResourceMetadataCommand", async (command, { registry }) => {
-    return registry
-      .resolve("resourceService")
-      .updateMetadata(command.payload.resourceId, command.payload.metadata);
+  commandBus.register("UpdateResourceMetadataCommand", async (command, context) => {
+    await requireResourceInActiveWorkspace(command.payload.resourceId, context);
+    const { registry } = context;
+    return registry.resolve("resourceService").updateMetadata(command.payload.resourceId, command.payload.metadata);
   });
 }

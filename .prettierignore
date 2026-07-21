@@ -1,0 +1,7 @@
+node_modules
+.turbo
+dist
+out
+release
+apps/shell/build
+pnpm-lock.yaml

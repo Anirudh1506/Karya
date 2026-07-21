@@ -19,10 +19,7 @@ export interface KernelCommandContext {
   unitOfWork?: MetadataUnitOfWork;
   afterCommit(operation: () => Promise<void>): void;
   afterRollback(operation: () => Promise<void>): void;
-  publish<TEventName extends KaryaEventName>(
-    eventName: TEventName,
-    payload: KaryaEventMap[TEventName],
-  ): Promise<void>;
+  publish<TEventName extends KaryaEventName>(eventName: TEventName, payload: KaryaEventMap[TEventName]): Promise<void>;
 }
 
 export class CommandBus {

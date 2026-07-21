@@ -1,9 +1,42 @@
-import { Archive, Bold, CheckSquare, Code, Heading2, Highlighter, Italic, List, ListOrdered, Minus, Pencil, Quote, RotateCcw, Strikethrough, Underline, X } from "lucide-react";
+import {
+  Archive,
+  Bold,
+  CheckSquare,
+  Code,
+  Heading2,
+  Highlighter,
+  Italic,
+  List,
+  ListOrdered,
+  Minus,
+  Pencil,
+  Quote,
+  RotateCcw,
+  Strikethrough,
+  Underline,
+  X,
+} from "lucide-react";
 import { Badge, Button, Surface } from "@karya/ui";
 import type { KernelSnapshot } from "@karya/core";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import type { ResourceSnapshot, TaskPriority, TaskStatus } from "../../types";
-import { countWords, displayWorkspaceName, formatTaskPriority, formatTaskStatus, readStringAttribute, readTaskPriority, readTaskStatus } from "../../resources/resource-utils";
+import {
+  countWords,
+  displayWorkspaceName,
+  formatTaskPriority,
+  formatTaskStatus,
+  readStringAttribute,
+  readTaskPriority,
+  readTaskStatus,
+} from "../../resources/resource-utils";
 
 export function NativeNoteEditor({
   note,
@@ -154,7 +187,10 @@ export function NativeNoteEditor({
     if (modifier && event.key.toLocaleLowerCase() === "z") {
       return;
     }
-    if ((modifier && event.key.toLocaleLowerCase() === "y") || (modifier && event.shiftKey && event.key.toLocaleLowerCase() === "z")) {
+    if (
+      (modifier && event.key.toLocaleLowerCase() === "y") ||
+      (modifier && event.shiftKey && event.key.toLocaleLowerCase() === "z")
+    ) {
       return;
     }
     if (modifier && event.key.toLocaleLowerCase() === "b") {
@@ -217,11 +253,12 @@ export function NativeNoteEditor({
               <Badge>Native Note</Badge>
               <Badge>{readStringAttribute(note, "noteOrigin") ?? "native"}</Badge>
               <Badge>Editing</Badge>
-            <Badge>{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving" : "Unsaved"}</Badge>
+              <Badge>{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving" : "Unsaved"}</Badge>
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal">{note.metadata.title}</h1>
             <p className="mt-2 text-sm text-[var(--karya-muted)]">
-              {[profile?.name, workspace ? displayWorkspaceName(workspace) : undefined].filter(Boolean).join(" / ") || "Karya Note"}
+              {[profile?.name, workspace ? displayWorkspaceName(workspace) : undefined].filter(Boolean).join(" / ") ||
+                "Karya Note"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -243,36 +280,76 @@ export function NativeNoteEditor({
 
       <Surface className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
         <div className="flex flex-wrap items-center gap-1 border-b border-[var(--karya-border)] bg-[var(--karya-surface)] p-3">
-          <EditorTool label="Heading" onClick={() => runEditorCommand("formatBlock", "h2")} icon={<Heading2 className="h-4 w-4" />} />
+          <EditorTool
+            label="Heading"
+            onClick={() => runEditorCommand("formatBlock", "h2")}
+            icon={<Heading2 className="h-4 w-4" />}
+          />
           <EditorTool label="Bold" onClick={() => runEditorCommand("bold")} icon={<Bold className="h-4 w-4" />} />
           <EditorTool label="Italic" onClick={() => runEditorCommand("italic")} icon={<Italic className="h-4 w-4" />} />
-          <EditorTool label="Underline" onClick={() => runEditorCommand("underline")} icon={<Underline className="h-4 w-4" />} />
-          <EditorTool label="Strikethrough" onClick={() => runEditorCommand("strikeThrough")} icon={<Strikethrough className="h-4 w-4" />} />
-          <EditorTool label="Highlight" onClick={() => runEditorCommand("hiliteColor", "#fef08a")} icon={<Highlighter className="h-4 w-4" />} />
-          <EditorTool label="Inline Code" onClick={() => runEditorCommand("formatBlock", "pre")} icon={<Code className="h-4 w-4" />} />
-          <EditorTool label="Bullet List" onClick={() => runEditorCommand("insertUnorderedList")} icon={<List className="h-4 w-4" />} />
-          <EditorTool label="Numbered List" onClick={() => runEditorCommand("insertOrderedList")} icon={<ListOrdered className="h-4 w-4" />} />
-          <EditorTool label="Checklist" onClick={() => insertChecklistItem(editorRef.current, syncEditorContent)} icon={<CheckSquare className="h-4 w-4" />} />
-          <EditorTool label="Quote" onClick={() => runEditorCommand("formatBlock", "blockquote")} icon={<Quote className="h-4 w-4" />} />
-          <EditorTool label="Horizontal Rule" onClick={() => runEditorCommand("insertHorizontalRule")} icon={<Minus className="h-4 w-4" />} />
+          <EditorTool
+            label="Underline"
+            onClick={() => runEditorCommand("underline")}
+            icon={<Underline className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Strikethrough"
+            onClick={() => runEditorCommand("strikeThrough")}
+            icon={<Strikethrough className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Highlight"
+            onClick={() => runEditorCommand("hiliteColor", "#fef08a")}
+            icon={<Highlighter className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Inline Code"
+            onClick={() => runEditorCommand("formatBlock", "pre")}
+            icon={<Code className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Bullet List"
+            onClick={() => runEditorCommand("insertUnorderedList")}
+            icon={<List className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Numbered List"
+            onClick={() => runEditorCommand("insertOrderedList")}
+            icon={<ListOrdered className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Checklist"
+            onClick={() => insertChecklistItem(editorRef.current, syncEditorContent)}
+            icon={<CheckSquare className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Quote"
+            onClick={() => runEditorCommand("formatBlock", "blockquote")}
+            icon={<Quote className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Horizontal Rule"
+            onClick={() => runEditorCommand("insertHorizontalRule")}
+            icon={<Minus className="h-4 w-4" />}
+          />
           <div className="ml-auto flex gap-2 text-xs text-[var(--karya-muted)]">
             <span>{wordCount} words</span>
             <span>{plainText.length} chars</span>
             <span>{readingTime} min read</span>
           </div>
         </div>
-          <div
-            ref={editorRef}
-            className="note-editor min-h-0 flex-1 overflow-y-auto bg-[var(--karya-page)] p-8 text-base leading-8 text-[var(--karya-text)] outline-none"
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={captureSelection}
-            onClick={(event) => handleEditorClick(event, syncEditorContent)}
-            onInput={syncEditorContent}
-            onKeyDown={handleEditorKeyDown}
-            onKeyUp={syncEditorContent}
-            onMouseUp={captureSelection}
-          />
+        <div
+          ref={editorRef}
+          className="note-editor min-h-0 flex-1 overflow-y-auto bg-[var(--karya-page)] p-8 text-base leading-8 text-[var(--karya-text)] outline-none"
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={captureSelection}
+          onClick={(event) => handleEditorClick(event, syncEditorContent)}
+          onInput={syncEditorContent}
+          onKeyDown={handleEditorKeyDown}
+          onKeyUp={syncEditorContent}
+          onMouseUp={captureSelection}
+        />
       </Surface>
       {pendingClose ? (
         <UnsavedChangesDialog
@@ -309,15 +386,18 @@ export function NativeTaskEditor({
   onComplete(resourceId: string): void;
   onRename(resource: ResourceSnapshot): void;
   onReopen(resourceId: string): void;
-  onUpdateTask(resourceId: string, patch: {
-    title?: string;
-    description?: string;
-    status?: TaskStatus;
-    priority?: TaskPriority;
-    dueDate?: string;
-    reminderAt?: string;
-    parentTaskId?: string;
-  }): Promise<void>;
+  onUpdateTask(
+    resourceId: string,
+    patch: {
+      title?: string;
+      description?: string;
+      status?: TaskStatus;
+      priority?: TaskPriority;
+      dueDate?: string;
+      reminderAt?: string;
+      parentTaskId?: string;
+    },
+  ): Promise<void>;
   snapshot?: KernelSnapshot;
 }): ReactElement {
   const [description, setDescription] = useState(noteContentToHtml(readStringAttribute(task, "taskDescription") ?? ""));
@@ -384,10 +464,11 @@ export function NativeTaskEditor({
   };
 
   useEffect(() => {
-    const dirty = description !== persistedDescription
-      || status !== readTaskStatus(task)
-      || priority !== readTaskPriority(task)
-      || dueDate !== (readStringAttribute(task, "taskDueDate") ?? "");
+    const dirty =
+      description !== persistedDescription ||
+      status !== readTaskStatus(task) ||
+      priority !== readTaskPriority(task) ||
+      dueDate !== (readStringAttribute(task, "taskDueDate") ?? "");
     if (!dirty) {
       setSaveState("saved");
       return;
@@ -421,7 +502,8 @@ export function NativeTaskEditor({
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal">{task.metadata.title}</h1>
             <p className="mt-2 text-sm text-[var(--karya-muted)]">
-              {[profile?.name, workspace ? displayWorkspaceName(workspace) : undefined].filter(Boolean).join(" / ") || "Karya Task"}
+              {[profile?.name, workspace ? displayWorkspaceName(workspace) : undefined].filter(Boolean).join(" / ") ||
+                "Karya Task"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -495,9 +577,21 @@ export function NativeTaskEditor({
         <div className="flex flex-wrap items-center gap-1 border-b border-[var(--karya-border)] bg-[var(--karya-surface)] p-3">
           <EditorTool label="Bold" onClick={() => runEditorCommand("bold")} icon={<Bold className="h-4 w-4" />} />
           <EditorTool label="Italic" onClick={() => runEditorCommand("italic")} icon={<Italic className="h-4 w-4" />} />
-          <EditorTool label="Bullet List" onClick={() => runEditorCommand("insertUnorderedList")} icon={<List className="h-4 w-4" />} />
-          <EditorTool label="Numbered List" onClick={() => runEditorCommand("insertOrderedList")} icon={<ListOrdered className="h-4 w-4" />} />
-          <EditorTool label="Checklist" onClick={() => insertChecklistItem(editorRef.current, syncEditorContent)} icon={<CheckSquare className="h-4 w-4" />} />
+          <EditorTool
+            label="Bullet List"
+            onClick={() => runEditorCommand("insertUnorderedList")}
+            icon={<List className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Numbered List"
+            onClick={() => runEditorCommand("insertOrderedList")}
+            icon={<ListOrdered className="h-4 w-4" />}
+          />
+          <EditorTool
+            label="Checklist"
+            onClick={() => insertChecklistItem(editorRef.current, syncEditorContent)}
+            icon={<CheckSquare className="h-4 w-4" />}
+          />
           <div className="ml-auto text-xs text-[var(--karya-muted)]">{countWords(plainText)} words</div>
         </div>
         <div
@@ -552,8 +646,12 @@ function UnsavedChangesDialog({
           This note has local edits that have not been persisted through Karya Core yet.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button variant="ghost" onClick={onDiscard}>Discard</Button>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="ghost" onClick={onDiscard}>
+            Discard
+          </Button>
           <Button onClick={() => void onSave()}>Save</Button>
         </div>
       </div>
@@ -577,7 +675,7 @@ function getCurrentChecklistItem(editor: HTMLDivElement | null): HTMLElement | u
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return undefined;
   const node = selection.anchorNode;
-  const element = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement;
+  const element = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement;
   const checklistItem = element?.closest(".note-checklist-item");
   return checklistItem instanceof HTMLElement && editor.contains(checklistItem) ? checklistItem : undefined;
 }
@@ -663,7 +761,14 @@ function restoreEditorSelection(editor: HTMLDivElement | null, range: Range | nu
   const selection = window.getSelection();
   if (!selection) return;
   selection.removeAllRanges();
-  if (range && editor.contains(range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement)) {
+  if (
+    range &&
+    editor.contains(
+      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement,
+    )
+  ) {
     selection.addRange(range);
     return;
   }
@@ -689,7 +794,7 @@ function sanitizeNoteHtml(html: string): string {
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/\son[a-z]+="[^"]*"/gi, "")
     .replace(/\son[a-z]+='[^']*'/gi, "")
-    .replace(/href=["']javascript:[^"']*["']/gi, "href=\"#\"");
+    .replace(/href=["']javascript:[^"']*["']/gi, 'href="#"');
 }
 
 export function htmlToPlainText(html: string): string {

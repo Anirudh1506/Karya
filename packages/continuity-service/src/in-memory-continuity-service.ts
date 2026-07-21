@@ -1,6 +1,15 @@
 import type { EventBus } from "@karya/event-bus";
 import type { SessionRepository } from "@karya/persistence";
-import type { ContinuitySession, EntityId, LayoutState, ResumeContext, ResumeHistoryEntry, WorkspaceActivityType, ContinuityWorkspaceSession, WorkspaceNavigationContext } from "@karya/types";
+import type {
+  ContinuitySession,
+  EntityId,
+  LayoutState,
+  ResumeContext,
+  ResumeHistoryEntry,
+  WorkspaceActivityType,
+  ContinuityWorkspaceSession,
+  WorkspaceNavigationContext,
+} from "@karya/types";
 import type { ContinuityService } from "./contracts";
 import { InMemorySessionRepository } from "./repositories/in-memory-session-repository";
 import { createActivity, createWorkspaceSession, hasRecentEquivalentActivity } from "./utils/workspace-session";
@@ -18,7 +27,7 @@ export class InMemoryContinuityService implements ContinuityService {
 
   subscribeToEvents(): () => void {
     const unsubscribeCreated = this.eventBus.subscribe("ResourceCreated", async ({ resource }) => {
-      if (isFolderImportResource(resource) || isFolderImportChild(resource)) return;
+      if (resource.tags.includes("linked") || isFolderImportResource(resource) || isFolderImportChild(resource)) return;
       await this.addRecentResource(resource.id);
       await this.recordWorkspaceResourceActivity({
         workspaceId: resource.primaryWorkspaceId ?? resource.workspaceRefs[0],
@@ -74,6 +83,7 @@ export class InMemoryContinuityService implements ContinuityService {
         resourceId: resource.id,
         title: resource.metadata.title,
         type: "resource-edited",
+        activateContext: false,
       });
     });
     const unsubscribeReferenced = this.eventBus.subscribe("ResourceReferenced", async ({ resource, workspaceId }) => {
@@ -92,6 +102,7 @@ export class InMemoryContinuityService implements ContinuityService {
         resourceId: resource.id,
         title: resource.metadata.title,
         type: "resource-moved",
+        activateContext: false,
       });
     });
     const unsubscribeArchived = this.eventBus.subscribe("ResourceArchived", async ({ resource }) => {
@@ -109,15 +120,18 @@ export class InMemoryContinuityService implements ContinuityService {
     const unsubscribeDeleted = this.eventBus.subscribe("ResourceDeleted", async ({ resource }) => {
       await this.removeRecentResource(resource.id);
     });
-    const unsubscribeApplicationLaunched = this.eventBus.subscribe("ApplicationLaunched", async ({ applicationId, application, workspaceId, profileId }) => {
-      await this.addRecentApplication(applicationId);
-      await this.recordWorkspaceApplicationLaunch({
-        workspaceId: workspaceId ?? this.session.activeWorkspaceId,
-        profileId: profileId ?? this.session.activeProfileId,
-        applicationId,
-        title: application.metadata.name,
-      });
-    });
+    const unsubscribeApplicationLaunched = this.eventBus.subscribe(
+      "ApplicationLaunched",
+      async ({ applicationId, application, workspaceId, profileId }) => {
+        await this.addRecentApplication(applicationId);
+        await this.recordWorkspaceApplicationLaunch({
+          workspaceId: workspaceId ?? this.session.activeWorkspaceId,
+          profileId: profileId ?? this.session.activeProfileId,
+          applicationId,
+          title: application.metadata.name,
+        });
+      },
+    );
 
     return () => {
       unsubscribeCreated();
@@ -145,7 +159,10 @@ export class InMemoryContinuityService implements ContinuityService {
   }
 
   async setActiveProfile(profileId: EntityId): Promise<ContinuitySession> {
-    return this.updateSession({ activeProfileId: profileId });
+    return this.updateSession({
+      activeProfileId: profileId,
+      activeWorkspaceId: undefined,
+    });
   }
 
   async setActiveWorkspace(workspaceId: EntityId): Promise<ContinuitySession> {
@@ -199,7 +216,13 @@ export class InMemoryContinuityService implements ContinuityService {
             capturedAt: now,
           },
           activityTimeline: [
-            createActivity({ workspaceId, profileId, type: "workspace-opened", title: "Opened Workspace", occurredAt: now }),
+            createActivity({
+              workspaceId,
+              profileId,
+              type: "workspace-opened",
+              title: "Opened Workspace",
+              occurredAt: now,
+            }),
             ...existing.activityTimeline,
           ].slice(0, 80),
         }
@@ -241,7 +264,13 @@ export class InMemoryContinuityService implements ContinuityService {
       lastResumeAt: now,
       resumeCount: existing.resumeCount + 1,
       activityTimeline: [
-        createActivity({ workspaceId, profileId, type: "workspace-resumed", title: "Resumed Workspace", occurredAt: now }),
+        createActivity({
+          workspaceId,
+          profileId,
+          type: "workspace-resumed",
+          title: "Resumed Workspace",
+          occurredAt: now,
+        }),
         ...existing.activityTimeline,
       ].slice(0, 80),
     };
@@ -271,8 +300,14 @@ export class InMemoryContinuityService implements ContinuityService {
     });
   }
 
-  async updateWorkspaceNavigation(context: WorkspaceNavigationContext & { profileId: EntityId }): Promise<ContinuitySession> {
-    const workspaceSession = this.getOrCreateWorkspaceSession(context.workspaceId, context.profileId, context.capturedAt);
+  async updateWorkspaceNavigation(
+    context: WorkspaceNavigationContext & { profileId: EntityId },
+  ): Promise<ContinuitySession> {
+    const workspaceSession = this.getOrCreateWorkspaceSession(
+      context.workspaceId,
+      context.profileId,
+      context.capturedAt,
+    );
     const nextWorkspaceSession: ContinuityWorkspaceSession = {
       ...workspaceSession,
       profileId: context.profileId,
@@ -288,7 +323,10 @@ export class InMemoryContinuityService implements ContinuityService {
       },
       lastSelectedResourceId: context.selectedResourceId ?? workspaceSession.lastSelectedResourceId,
       activeResourceIds: context.selectedResourceId
-        ? [context.selectedResourceId, ...workspaceSession.activeResourceIds.filter((id) => id !== context.selectedResourceId)].slice(0, 8)
+        ? [
+            context.selectedResourceId,
+            ...workspaceSession.activeResourceIds.filter((id) => id !== context.selectedResourceId),
+          ].slice(0, 8)
         : workspaceSession.activeResourceIds,
     };
 
@@ -302,11 +340,25 @@ export class InMemoryContinuityService implements ContinuityService {
     });
   }
 
-  async recordWorkspaceResourceActivity(input: { workspaceId?: EntityId; profileId: EntityId; resourceId: EntityId; title: string; type: WorkspaceActivityType }): Promise<ContinuitySession> {
+  async recordWorkspaceResourceActivity(input: {
+    workspaceId?: EntityId;
+    profileId: EntityId;
+    resourceId: EntityId;
+    title: string;
+    type: WorkspaceActivityType;
+    activateContext?: boolean;
+  }): Promise<ContinuitySession> {
     if (!input.workspaceId) return this.addRecentResource(input.resourceId);
     const now = new Date().toISOString();
     const workspaceSession = this.getOrCreateWorkspaceSession(input.workspaceId, input.profileId, now);
-    const activity = createActivity({ workspaceId: input.workspaceId, profileId: input.profileId, type: input.type, resourceId: input.resourceId, title: input.title, occurredAt: now });
+    const activity = createActivity({
+      workspaceId: input.workspaceId,
+      profileId: input.profileId,
+      type: input.type,
+      resourceId: input.resourceId,
+      title: input.title,
+      occurredAt: now,
+    });
     const activityTimeline = hasRecentEquivalentActivity(workspaceSession.activityTimeline, activity)
       ? workspaceSession.activityTimeline
       : [activity, ...workspaceSession.activityTimeline].slice(0, 80);
@@ -316,34 +368,58 @@ export class InMemoryContinuityService implements ContinuityService {
       state: "active",
       lastActiveAt: now,
       lastSelectedResourceId: input.resourceId,
-      activeResourceIds: [input.resourceId, ...workspaceSession.activeResourceIds.filter((id) => id !== input.resourceId)].slice(0, 8),
-      recentResourceIds: [input.resourceId, ...workspaceSession.recentResourceIds.filter((id) => id !== input.resourceId)].slice(0, 16),
+      activeResourceIds: [
+        input.resourceId,
+        ...workspaceSession.activeResourceIds.filter((id) => id !== input.resourceId),
+      ].slice(0, 8),
+      recentResourceIds: [
+        input.resourceId,
+        ...workspaceSession.recentResourceIds.filter((id) => id !== input.resourceId),
+      ].slice(0, 16),
       activityTimeline,
     };
 
     return this.updateSession({
-      activeProfileId: input.profileId,
-      activeWorkspaceId: input.workspaceId,
-      recentResourceIds: [input.resourceId, ...this.session.recentResourceIds.filter((id) => id !== input.resourceId)].slice(0, 16),
+      activeProfileId: input.activateContext === false ? this.session.activeProfileId : input.profileId,
+      activeWorkspaceId: input.activateContext === false ? this.session.activeWorkspaceId : input.workspaceId,
+      recentResourceIds: [
+        input.resourceId,
+        ...this.session.recentResourceIds.filter((id) => id !== input.resourceId),
+      ].slice(0, 16),
       workspaceSessions: {
         ...(this.session.workspaceSessions ?? {}),
         [input.workspaceId]: nextWorkspaceSession,
       },
-      resumeContext: {
-        profileId: input.profileId,
-        workspaceId: input.workspaceId,
-        resourceIds: nextWorkspaceSession.recentResourceIds,
-        applicationIds: nextWorkspaceSession.launchedApplicationIds,
-        capturedAt: now,
-      },
+      resumeContext:
+        input.activateContext === false
+          ? this.session.resumeContext
+          : {
+              profileId: input.profileId,
+              workspaceId: input.workspaceId,
+              resourceIds: nextWorkspaceSession.recentResourceIds,
+              applicationIds: nextWorkspaceSession.launchedApplicationIds,
+              capturedAt: now,
+            },
     });
   }
 
-  async recordWorkspaceApplicationLaunch(input: { workspaceId?: EntityId; profileId: EntityId; applicationId: EntityId; title: string }): Promise<ContinuitySession> {
+  async recordWorkspaceApplicationLaunch(input: {
+    workspaceId?: EntityId;
+    profileId: EntityId;
+    applicationId: EntityId;
+    title: string;
+  }): Promise<ContinuitySession> {
     if (!input.workspaceId) return this.addRecentApplication(input.applicationId);
     const now = new Date().toISOString();
     const workspaceSession = this.getOrCreateWorkspaceSession(input.workspaceId, input.profileId, now);
-    const activity = createActivity({ workspaceId: input.workspaceId, profileId: input.profileId, type: "application-launched", applicationId: input.applicationId, title: input.title, occurredAt: now });
+    const activity = createActivity({
+      workspaceId: input.workspaceId,
+      profileId: input.profileId,
+      type: "application-launched",
+      applicationId: input.applicationId,
+      title: input.title,
+      occurredAt: now,
+    });
     const activityTimeline = hasRecentEquivalentActivity(workspaceSession.activityTimeline, activity)
       ? workspaceSession.activityTimeline
       : [activity, ...workspaceSession.activityTimeline].slice(0, 80);
@@ -352,14 +428,20 @@ export class InMemoryContinuityService implements ContinuityService {
       profileId: input.profileId,
       state: "active",
       lastActiveAt: now,
-      launchedApplicationIds: [input.applicationId, ...workspaceSession.launchedApplicationIds.filter((id) => id !== input.applicationId)].slice(0, 12),
+      launchedApplicationIds: [
+        input.applicationId,
+        ...workspaceSession.launchedApplicationIds.filter((id) => id !== input.applicationId),
+      ].slice(0, 12),
       activityTimeline,
     };
 
     return this.updateSession({
       activeProfileId: input.profileId,
       activeWorkspaceId: input.workspaceId,
-      recentApplicationIds: [input.applicationId, ...(this.session.recentApplicationIds ?? []).filter((id) => id !== input.applicationId)].slice(0, 12),
+      recentApplicationIds: [
+        input.applicationId,
+        ...(this.session.recentApplicationIds ?? []).filter((id) => id !== input.applicationId),
+      ].slice(0, 12),
       workspaceSessions: {
         ...(this.session.workspaceSessions ?? {}),
         [input.workspaceId]: nextWorkspaceSession,
@@ -376,10 +458,7 @@ export class InMemoryContinuityService implements ContinuityService {
 
   async addRecentResource(resourceId: EntityId): Promise<ContinuitySession> {
     return this.updateSession({
-      recentResourceIds: [
-        resourceId,
-        ...this.session.recentResourceIds.filter((id) => id !== resourceId),
-      ].slice(0, 8),
+      recentResourceIds: [resourceId, ...this.session.recentResourceIds.filter((id) => id !== resourceId)].slice(0, 8),
     });
   }
 
@@ -391,10 +470,14 @@ export class InMemoryContinuityService implements ContinuityService {
           ...workspaceSession,
           activeResourceIds: workspaceSession.activeResourceIds.filter((id) => id !== resourceId),
           recentResourceIds: workspaceSession.recentResourceIds.filter((id) => id !== resourceId),
-          lastSelectedResourceId: workspaceSession.lastSelectedResourceId === resourceId ? undefined : workspaceSession.lastSelectedResourceId,
-          lastNavigationContext: workspaceSession.lastNavigationContext?.selectedResourceId === resourceId
-            ? { ...workspaceSession.lastNavigationContext, selectedResourceId: undefined }
-            : workspaceSession.lastNavigationContext,
+          lastSelectedResourceId:
+            workspaceSession.lastSelectedResourceId === resourceId
+              ? undefined
+              : workspaceSession.lastSelectedResourceId,
+          lastNavigationContext:
+            workspaceSession.lastNavigationContext?.selectedResourceId === resourceId
+              ? { ...workspaceSession.lastNavigationContext, selectedResourceId: undefined }
+              : workspaceSession.lastNavigationContext,
         },
       ]),
     );
@@ -426,16 +509,17 @@ export class InMemoryContinuityService implements ContinuityService {
     return this.updateSession({
       activeProfileId: context.profileId,
       activeWorkspaceId: context.workspaceId,
-      workspaceSessions: workspaceSession && context.workspaceId
-        ? {
-            ...(this.session.workspaceSessions ?? {}),
-            [context.workspaceId]: {
-              ...workspaceSession,
-              lastResumeAt: new Date().toISOString(),
-              resumeCount: workspaceSession.resumeCount + 1,
-            },
-          }
-        : this.session.workspaceSessions,
+      workspaceSessions:
+        workspaceSession && context.workspaceId
+          ? {
+              ...(this.session.workspaceSessions ?? {}),
+              [context.workspaceId]: {
+                ...workspaceSession,
+                lastResumeAt: new Date().toISOString(),
+                resumeCount: workspaceSession.resumeCount + 1,
+              },
+            }
+          : this.session.workspaceSessions,
       resumeContext: {
         ...context,
         capturedAt: now,
@@ -456,6 +540,22 @@ export class InMemoryContinuityService implements ContinuityService {
     });
   }
 
+  async recordSearch(query: string): Promise<ContinuitySession> {
+    const normalized = query.trim();
+    if (!normalized) return this.getCurrentSession();
+    const recentSearches = [
+      { query: normalized, searchedAt: new Date().toISOString() },
+      ...(this.session.recentSearches ?? []).filter(
+        (entry) => entry.query.toLocaleLowerCase() !== normalized.toLocaleLowerCase(),
+      ),
+    ].slice(0, 10);
+    return this.updateSession({ recentSearches });
+  }
+
+  async clearRecentSearches(): Promise<ContinuitySession> {
+    return this.updateSession({ recentSearches: [] });
+  }
+
   private async updateSession(patch: Partial<ContinuitySession>): Promise<ContinuitySession> {
     this.session = {
       ...this.session,
@@ -467,27 +567,35 @@ export class InMemoryContinuityService implements ContinuityService {
     return this.session;
   }
 
-  private getOrCreateWorkspaceSession(workspaceId: EntityId, profileId: EntityId, now: string): ContinuityWorkspaceSession {
+  private getOrCreateWorkspaceSession(
+    workspaceId: EntityId,
+    profileId: EntityId,
+    now: string,
+  ): ContinuityWorkspaceSession {
     return this.session.workspaceSessions?.[workspaceId] ?? createWorkspaceSession(workspaceId, profileId, now);
   }
 }
 
-function isFolderImportResource(resource: { metadata: { kind: string; attributes?: Record<string, string | number | boolean | null> }; tags: string[] }): boolean {
-  return resource.metadata.kind === "folder"
-    && (resource.tags.includes("imported") || typeof resource.metadata.attributes?.folderImportStatus === "string");
+function isFolderImportResource(resource: {
+  metadata: { kind: string; attributes?: Record<string, string | number | boolean | null> };
+  tags: string[];
+}): boolean {
+  return (
+    resource.metadata.kind === "folder" &&
+    (resource.tags.includes("imported") || typeof resource.metadata.attributes?.folderImportStatus === "string")
+  );
 }
 
-function isFolderImportChild(resource: { metadata: { attributes?: Record<string, string | number | boolean | null> } }): boolean {
+function isFolderImportChild(resource: {
+  metadata: { attributes?: Record<string, string | number | boolean | null> };
+}): boolean {
   return typeof resource.metadata.attributes?.folderParentId === "string";
 }
 
 function buildResumeHistory(existing: ResumeHistoryEntry[] | undefined, context: ResumeContext): ResumeHistoryEntry[] {
   const id = `resume-${context.workspaceId ?? "global"}-${context.capturedAt}`;
   const key = resumeHistoryKey(context);
-  return [
-    { id, ...context },
-    ...(existing ?? []).filter((entry) => resumeHistoryKey(entry) !== key),
-  ].slice(0, 12);
+  return [{ id, ...context }, ...(existing ?? []).filter((entry) => resumeHistoryKey(entry) !== key)].slice(0, 12);
 }
 
 function resumeHistoryKey(context: ResumeContext): string {

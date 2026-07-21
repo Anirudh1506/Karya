@@ -112,8 +112,7 @@ body {
     radial-gradient(circle at 15% 18%, rgba(57, 177, 157, 0.15), transparent 30rem),
     radial-gradient(circle at 85% 4%, rgba(232, 186, 76, 0.18), transparent 28rem),
     radial-gradient(circle at 52% 92%, rgba(116, 141, 210, 0.1), transparent 34rem),
-    linear-gradient(135deg, #f9f7ef 0%, #eef6f0 50%, #f4f1e8 100%),
-    var(--karya-bg);
+    linear-gradient(135deg, #f9f7ef 0%, #eef6f0 50%, #f4f1e8 100%), var(--karya-bg);
 }
 
 .dark body {
@@ -173,7 +172,12 @@ textarea {
     radial-gradient(circle at 18% 30%, rgba(65, 184, 162, 0.16), transparent 32rem),
     radial-gradient(circle at 84% 6%, rgba(223, 180, 64, 0.18), transparent 34rem),
     linear-gradient(135deg, #f9f7ef 0%, #eef6f0 48%, #f4f0e5 100%);
-  background-size: 64px 64px, 64px 64px, auto, auto, auto;
+  background-size:
+    64px 64px,
+    64px 64px,
+    auto,
+    auto,
+    auto;
   color: var(--karya-text);
 }
 
@@ -184,19 +188,28 @@ textarea {
     radial-gradient(circle at 16% 28%, rgba(55, 219, 196, 0.18), transparent 32rem),
     radial-gradient(circle at 82% 8%, rgba(236, 204, 93, 0.18), transparent 34rem),
     linear-gradient(135deg, #0b211c 0%, #08130f 44%, #090b08 100%);
-  background-size: 64px 64px, 64px 64px, auto, auto, auto;
+  background-size:
+    64px 64px,
+    64px 64px,
+    auto,
+    auto,
+    auto;
 }
 
 .karya-app-chrome {
   background: color-mix(in srgb, var(--karya-surface-strong) 76%, transparent);
   border-color: transparent;
-  box-shadow: 0 1px 0 var(--karya-border), 0 12px 36px rgba(24, 24, 27, 0.045);
+  box-shadow:
+    0 1px 0 var(--karya-border),
+    0 12px 36px rgba(24, 24, 27, 0.045);
   backdrop-filter: blur(22px);
 }
 
 .dark .karya-app-chrome {
   background: rgba(8, 17, 14, 0.58);
-  box-shadow: 0 1px 0 rgba(151, 232, 215, 0.09), 0 18px 50px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 1px 0 rgba(151, 232, 215, 0.09),
+    0 18px 50px rgba(0, 0, 0, 0.18);
 }
 
 .karya-glass-panel {
@@ -209,7 +222,11 @@ textarea {
 .karya-nav-item {
   border: 1px solid transparent;
   color: var(--karya-muted);
-  transition: color 150ms var(--karya-ease), background-color 150ms var(--karya-ease), border-color 150ms var(--karya-ease), transform 150ms var(--karya-ease);
+  transition:
+    color 150ms var(--karya-ease),
+    background-color 150ms var(--karya-ease),
+    border-color 150ms var(--karya-ease),
+    transform 150ms var(--karya-ease);
 }
 
 .karya-nav-item:hover {
@@ -310,7 +327,11 @@ textarea {
 }
 
 .karya-interactive {
-  transition: transform 150ms var(--karya-ease), background-color 150ms var(--karya-ease), border-color 150ms var(--karya-ease), box-shadow 150ms var(--karya-ease);
+  transition:
+    transform 150ms var(--karya-ease),
+    background-color 150ms var(--karya-ease),
+    border-color 150ms var(--karya-ease),
+    box-shadow 150ms var(--karya-ease);
 }
 
 .karya-interactive:hover {

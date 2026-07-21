@@ -141,14 +141,9 @@ export function createBookmarkAttributes(input: {
     bookmarkPinned: input.pinned,
     bookmarkCreatedAt: input.createdAt,
     bookmarkUpdatedAt: input.updatedAt,
-    bookmarkSearchText: [
-      input.title,
-      input.url,
-      input.domain,
-      input.description,
-      input.notes,
-      ...input.labels,
-    ].filter(Boolean).join(" "),
+    bookmarkSearchText: [input.title, input.url, input.domain, input.description, input.notes, ...input.labels]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 

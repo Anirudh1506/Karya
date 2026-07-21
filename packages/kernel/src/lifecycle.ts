@@ -1,7 +1,13 @@
 import type { StateEngine } from "@karya/state-engine";
-import type { InstalledApplication, KaryaActivity, Profile, SearchDocument } from "@karya/types";
+import {
+  createProfileDocument as createUniversalProfileDocument,
+  createResourceDocument,
+  createWorkspaceDocument,
+} from "@karya/search-service";
+import type { InstalledApplication, KaryaActivity, SearchDocument } from "@karya/types";
 import type { ServiceRegistry } from "./service-registry";
 import type { KernelShellApi } from "./shell-api";
+import { NO_ACTIVE_PROFILE_ID } from "./constants";
 
 export async function initializeKernel(
   registry: ServiceRegistry,
@@ -12,12 +18,27 @@ export async function initializeKernel(
   await registerServices(registry);
   await initializePersistence(registry);
   await discoverApplications(registry);
+  await restoreActiveProfile(registry);
   await hydrateStateEngine(registry, stateEngine);
   const unsubscribeStateEngine = stateEngine.start();
+  await registry.resolve("continueWorkingService").refresh();
   await initializeSearch(registry);
   await restoreSession(registry);
   await shell.initialize();
   return unsubscribeStateEngine;
+}
+
+async function restoreActiveProfile(registry: ServiceRegistry): Promise<void> {
+  const [session, profiles] = await Promise.all([
+    registry.resolve("continuityService").getCurrentSession(),
+    registry.resolve("profileService").listProfiles(),
+  ]);
+  const persisted = profiles.find(
+    (profile) => profile.id === session.activeProfileId && (profile.lifecycleState ?? "active") === "active",
+  );
+  if (persisted) {
+    await registry.resolve("profileService").activateProfile(persisted.id);
+  }
 }
 
 async function initialize(registry: ServiceRegistry): Promise<void> {
@@ -39,14 +60,23 @@ async function discoverApplications(registry: ServiceRegistry): Promise<void> {
 async function initializeSearch(registry: ServiceRegistry): Promise<void> {
   const searchService = registry.resolve("searchService");
   await searchService.loadPersistedIndex();
-
-  if ((await searchService.listDocuments()).length === 0) {
-    await seedSearchIndex(registry);
-  }
+  await seedSearchIndex(registry);
 }
 
 async function hydrateStateEngine(registry: ServiceRegistry, stateEngine: StateEngine): Promise<void> {
-  const [activeProfile, resources, events, activities, commands, notifications, profiles, workspaces, applications, settings, session] = await Promise.all([
+  const [
+    activeProfile,
+    resources,
+    events,
+    activities,
+    commands,
+    notifications,
+    profiles,
+    workspaces,
+    applications,
+    settings,
+    session,
+  ] = await Promise.all([
     registry.resolve("profileService").getActiveProfile(),
     registry.resolve("resourceService").listResources(),
     registry.resolve("eventService").listEvents(),
@@ -71,8 +101,8 @@ async function hydrateStateEngine(registry: ServiceRegistry, stateEngine: StateE
     session,
     settings,
     user: {
-      id: activeProfile.id,
-      name: activeProfile.name,
+      id: activeProfile?.id ?? NO_ACTIVE_PROFILE_ID,
+      name: activeProfile?.name ?? "Karya User",
     },
     workspaces,
   });
@@ -90,9 +120,7 @@ function registerKernelEventHandlers(registry: ServiceRegistry): void {
   eventBus.subscribe("ResourceCreated", async ({ resource }) => {
     const workspaces = await registry.resolve("workspaceService").listWorkspaces();
     const availableWorkspaceIds = new Set(
-      workspaces
-        .filter((workspace) => workspace.lifecycleState !== "deleted")
-        .map((workspace) => workspace.id),
+      workspaces.filter((workspace) => workspace.lifecycleState !== "deleted").map((workspace) => workspace.id),
     );
     await Promise.all(
       resource.workspaceRefs
@@ -101,15 +129,7 @@ function registerKernelEventHandlers(registry: ServiceRegistry): void {
     );
   });
 
-  eventBus.subscribe("workspace:opened", async ({ workspaceId }) => {
-    await registry.resolve("continuityService").setActiveWorkspace(workspaceId);
-  });
-
   eventBus.subscribe("workspace:activated", async ({ workspaceId }) => {
-    await registry.resolve("continuityService").setActiveWorkspace(workspaceId);
-  });
-
-  eventBus.subscribe("workspace:restored", async ({ workspaceId }) => {
     await registry.resolve("continuityService").setActiveWorkspace(workspaceId);
   });
 
@@ -117,31 +137,40 @@ function registerKernelEventHandlers(registry: ServiceRegistry): void {
     await registry.resolve("continuityService").preserveWorkspaceSession(workspaceId);
   });
 
-  eventBus.subscribe("profile:changed", async ({ profileId }) => {
-    const profile = (await registry.resolve("profileService").listProfiles()).find((candidate) => candidate.id === profileId);
-    if (profile && (profile.lifecycleState ?? "active") === "active") {
-      await registry.resolve("searchService").index([createProfileDocument(profile)]);
+  eventBus.subscribe("ProfileOpened", async ({ profile, profileId }) => {
+    const continuity = registry.resolve("continuityService");
+    const previousSession = await continuity.getCurrentSession();
+    await continuity.setActiveProfile(profileId);
+
+    const workspaces = (await registry.resolve("workspaceService").listWorkspaces()).filter(
+      (workspace) =>
+        workspace.profileId === profileId &&
+        workspace.lifecycleState !== "archived" &&
+        workspace.lifecycleState !== "deleted",
+    );
+    const recentWorkspaceId = Object.values(previousSession.workspaceSessions ?? {})
+      .filter(
+        (session) =>
+          session.profileId === profileId && workspaces.some((workspace) => workspace.id === session.workspaceId),
+      )
+      .sort((left, right) => right.lastActiveAt.localeCompare(left.lastActiveAt))[0]?.workspaceId;
+    const workspace =
+      workspaces.find((candidate) => candidate.id === recentWorkspaceId) ??
+      workspaces.find((candidate) => candidate.id === profile.defaultSpaceId) ??
+      [...workspaces].sort((left, right) =>
+        (right.lastOpenedAt ?? right.updatedAt).localeCompare(left.lastOpenedAt ?? left.updatedAt),
+      )[0];
+    if (workspace) {
+      await registry.resolve("workspaceService").activateWorkspace(workspace.id);
     }
   });
 
-  eventBus.subscribe("ProfileCreated", async ({ profile }) => {
-    await registry.resolve("searchService").index([createProfileDocument(profile)]);
-  });
-
-  eventBus.subscribe("ProfileUpdated", async ({ profile }) => {
-    if (profile.lifecycleState === "deleted") {
-      await registry.resolve("searchService").remove(`profile:${profile.id}`);
-      return;
-    }
-    await registry.resolve("searchService").index([createProfileDocument(profile)]);
-  });
-
-  eventBus.subscribe("ProfileDeleted", async ({ profile }) => {
-    await registry.resolve("searchService").remove(`profile:${profile.id}`);
-  });
-
-  eventBus.subscribe("ProfileOpened", async ({ profileId }) => {
+  eventBus.subscribe("ProfileViewed", async ({ profileId }) => {
     await registry.resolve("continuityService").setActiveProfile(profileId);
+  });
+
+  eventBus.subscribe("WorkspaceArchived", async ({ workspace }) => {
+    await registry.resolve("continuityService").preserveWorkspaceSession(workspace.id);
   });
 
   eventBus.subscribe("ApplicationDiscovered", async ({ application }) => {
@@ -180,58 +209,40 @@ function registerKernelEventHandlers(registry: ServiceRegistry): void {
     await registry.resolve("searchService").index([createApplicationDocument(application)]);
   });
 
-  eventBus.subscribe("ApplicationLaunched", async ({ applicationId, workspaceId, profileId, resourceIds, workingDirectory, launchArguments }) => {
-    const session = await registry.resolve("continuityService").getCurrentSession();
-    await registry.resolve("continuityService").captureResumeContext({
-      profileId: profileId ?? session.activeProfileId,
-      workspaceId: workspaceId ?? session.activeWorkspaceId,
-      resourceIds,
-      applicationIds: [applicationId],
-      workingDirectory,
-      launchArguments,
-    });
-  });
+  eventBus.subscribe(
+    "ApplicationLaunched",
+    async ({ applicationId, workspaceId, profileId, resourceIds, workingDirectory, launchArguments }) => {
+      const session = await registry.resolve("continuityService").getCurrentSession();
+      await registry.resolve("continuityService").captureResumeContext({
+        profileId: profileId ?? session.activeProfileId,
+        workspaceId: workspaceId ?? session.activeWorkspaceId,
+        resourceIds,
+        applicationIds: [applicationId],
+        workingDirectory,
+        launchArguments,
+      });
+    },
+  );
 }
 
 async function seedSearchIndex(registry: ServiceRegistry): Promise<void> {
-  const [resources, events, activities, commands, notifications, profiles, workspaces, applications, settings] = await Promise.all([
-    registry.resolve("resourceService").listResources(),
-    registry.resolve("eventService").listEvents(),
-    registry.resolve("activityService").list(),
-    registry.resolve("commandRegistry").listSearchDocuments(),
-    registry.resolve("notificationService").list(),
-    registry.resolve("profileService").listProfiles(),
-    registry.resolve("workspaceService").listWorkspaces(),
-    registry.resolve("applicationRegistry").listInstalledApplications(),
-    registry.resolve("settingsService").listSettings(),
-  ]);
+  const [resources, events, activities, commands, notifications, profiles, workspaces, applications, settings] =
+    await Promise.all([
+      registry.resolve("resourceService").listResources(),
+      registry.resolve("eventService").listEvents(),
+      registry.resolve("activityService").list(),
+      registry.resolve("commandRegistry").listSearchDocuments(),
+      registry.resolve("notificationService").list(),
+      registry.resolve("profileService").listProfiles(),
+      registry.resolve("workspaceService").listWorkspaces(),
+      registry.resolve("applicationRegistry").listInstalledApplications(),
+      registry.resolve("settingsService").listSettings(),
+    ]);
 
   const documents: SearchDocument[] = [
     ...resources
-      .filter((resource) => resource.lifecycleState !== "deleted" && !isCalendarEventResource(resource))
-      .map((resource) => ({
-        id: `resource:${resource.id}`,
-        type: "resource" as const,
-        title: resource.metadata.title,
-        subtitle: resource.type,
-        keywords: [
-          ...resource.tags,
-          readStringAttribute(resource, "noteOrigin") ?? "",
-          readStringAttribute(resource, "noteHeadings") ?? "",
-          readStringAttribute(resource, "noteContent") ?? "",
-          readStringAttribute(resource, "noteIndexedContent") ?? "",
-          readStringAttribute(resource, "taskDescription") ?? "",
-          readStringAttribute(resource, "taskDescriptionText") ?? "",
-          readStringAttribute(resource, "taskChecklistItems") ?? "",
-          readStringAttribute(resource, "taskLabels") ?? "",
-          readStringAttribute(resource, "taskStatus") ?? "",
-          readStringAttribute(resource, "taskPriority") ?? "",
-          readStringAttribute(resource, "taskDueDate") ?? "",
-          readStringAttribute(resource, "taskReminderDate") ?? "",
-          readStringAttribute(resource, "taskReminderTime") ?? "",
-        ].filter(Boolean),
-          sourceId: resource.id,
-        })),
+      .filter((resource) => resource.lifecycleState === "active" && !isCalendarEventResource(resource))
+      .map(createResourceDocument),
     ...events
       .filter((event) => event.lifecycleState !== "deleted")
       .map((event) => ({
@@ -275,24 +286,19 @@ async function seedSearchIndex(registry: ServiceRegistry): Promise<void> {
         sourceId: notification.id,
       })),
     ...activities.map(createActivityDocument),
-    ...profiles.filter((profile) => profile.lifecycleState !== "deleted").map(createProfileDocument),
+    ...profiles
+      .filter((profile) => profile.lifecycleState !== "deleted" && profile.lifecycleState !== "archived")
+      .map(createUniversalProfileDocument),
     ...workspaces
-      .filter((workspace) => workspace.lifecycleState !== "deleted")
-      .map((workspace) => ({
-        id: `workspace:${workspace.id}`,
-        type: "workspace" as const,
-        title: workspace.name,
-        subtitle: workspace.metadata.description ?? "Workspace",
-        keywords: [
-          workspace.lifecycleState,
-          workspace.pinned ? "pinned" : "",
-          workspace.favorite ? "favorite" : "",
-          ...workspace.resourceRefs,
-        ].filter(Boolean),
-        sourceId: workspace.id,
-      })),
+      .filter((workspace) => workspace.lifecycleState !== "deleted" && workspace.lifecycleState !== "archived")
+      .map(createWorkspaceDocument),
     ...applications
-      .filter((application) => !application.hidden && application.lifecycleState === "available" && application.metadata.platform !== "karya")
+      .filter(
+        (application) =>
+          !application.hidden &&
+          application.lifecycleState === "available" &&
+          application.metadata.platform !== "karya",
+      )
       .map(createApplicationDocument),
     ...settings
       .filter((setting) => setting.searchable)
@@ -307,7 +313,7 @@ async function seedSearchIndex(registry: ServiceRegistry): Promise<void> {
     ...commands,
   ];
 
-  await registry.resolve("searchService").index(documents);
+  await registry.resolve("searchService").rebuild(documents);
 }
 
 function createActivityDocument(activity: KaryaActivity): SearchDocument {
@@ -338,30 +344,16 @@ function createActivityDocument(activity: KaryaActivity): SearchDocument {
   };
 }
 
-function readStringAttribute(resource: { metadata: { attributes?: Record<string, string | number | boolean | null> } }, key: string): string | undefined {
+function readStringAttribute(
+  resource: { metadata: { attributes?: Record<string, string | number | boolean | null> } },
+  key: string,
+): string | undefined {
   const value = resource.metadata.attributes?.[key];
   return typeof value === "string" ? value : undefined;
 }
 
 function isCalendarEventResource(resource: { type: string; metadata: { kind: string } }): boolean {
   return resource.metadata.kind === "calendar-event" || resource.type === "application/vnd.karya.calendar-event";
-}
-
-function createProfileDocument(profile: Profile): SearchDocument {
-  return {
-    id: `profile:${profile.id}`,
-    type: "profile",
-    title: profile.name,
-    subtitle: profile.lifecycleState === "archived" ? "Archived Profile" : profile.description ?? "Profile",
-    keywords: [
-      profile.lifecycleState ?? "active",
-      profile.template ?? "custom",
-      profile.icon ?? "",
-      profile.accentColor ?? "",
-      ...profile.spaceIds,
-    ].filter(Boolean),
-    sourceId: profile.id,
-  };
 }
 
 function createApplicationDocument(application: InstalledApplication): SearchDocument {

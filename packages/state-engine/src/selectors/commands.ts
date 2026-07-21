@@ -11,22 +11,6 @@ export function createSuggestedCommandDocuments(): SearchDocument[] {
       sourceId: "create-resource",
     },
     {
-      id: "command:create-profile",
-      type: "command",
-      title: "Create Profile",
-      subtitle: "Command",
-      keywords: ["new", "create", "profile", "responsibility", "⇧⌘P"],
-      sourceId: "create-profile",
-    },
-    {
-      id: "command:create-workspace",
-      type: "command",
-      title: "Create Workspace",
-      subtitle: "Command",
-      keywords: ["new", "create", "workspace", "⇧⌘W"],
-      sourceId: "create-workspace",
-    },
-    {
       id: "command:create-task",
       type: "command",
       title: "Create Task",

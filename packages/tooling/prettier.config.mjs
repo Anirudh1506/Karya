@@ -1,0 +1,7 @@
+export default {
+  printWidth: 120,
+  proseWrap: "preserve",
+  semi: true,
+  singleQuote: false,
+  trailingComma: "all",
+};

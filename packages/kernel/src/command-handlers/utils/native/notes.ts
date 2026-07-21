@@ -33,9 +33,11 @@ export async function createNativeNote(
 }
 
 export function isEditableKaryaNote(resource: Resource): boolean {
-  return resource.metadata.kind === "note"
-    && resource.metadata.attributes?.noteEditableInKarya !== false
-    && resource.metadata.attributes?.noteOrigin !== "linked";
+  return (
+    resource.metadata.kind === "note" &&
+    resource.metadata.attributes?.noteEditableInKarya !== false &&
+    resource.metadata.attributes?.noteOrigin !== "linked"
+  );
 }
 
 export function isNoteFile(extension: string | undefined | null): boolean {
@@ -62,7 +64,7 @@ export function createNoteTextMetrics(content: string): NonNullable<Resource["me
   const headings = content
     .split(/\n+/)
     .map((line) => /^#{1,6}\s+(.+)$/.exec(line.trim())?.[1] ?? /<h[1-6][^>]*>(.*?)<\/h[1-6]>/i.exec(line.trim())?.[1])
-    .map((heading) => heading ? noteContentToPlainText(heading) : undefined)
+    .map((heading) => (heading ? noteContentToPlainText(heading) : undefined))
     .filter((heading): heading is string => Boolean(heading));
 
   return {

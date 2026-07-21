@@ -2,16 +2,9 @@ import type { EntityId, ISODateString } from "./common";
 import type { RelationshipObjectType } from "./resource";
 
 export type NotificationCategory =
-  | "calendar"
-  | "task"
-  | "import"
-  | "workspace"
-  | "system"
-  | "collaboration"
-  | "ai"
-  | "automation";
+  "calendar" | "task" | "import" | "workspace" | "system" | "collaboration" | "ai" | "automation";
 
-export type NotificationStatus = "unread" | "read" | "archived" | "deleted";
+export type NotificationStatus = "unread" | "read" | "dismissed" | "archived" | "deleted";
 
 export type NotificationPriority = "low" | "normal" | "high" | "critical";
 
@@ -41,6 +34,8 @@ export interface NotificationObjectReference {
 
 export interface KaryaNotification {
   id: EntityId;
+  activityId?: EntityId;
+  notificationType?: string;
   icon: string;
   title: string;
   description?: string;
@@ -48,6 +43,7 @@ export interface KaryaNotification {
   source: string;
   workspaceId?: EntityId;
   profileId?: EntityId;
+  resourceId?: EntityId;
   status: NotificationStatus;
   priority: NotificationPriority;
   groupKey?: string;
@@ -59,6 +55,7 @@ export interface KaryaNotification {
   deliveredAt?: ISODateString;
   scheduledFor?: ISODateString;
   archivedAt?: ISODateString;
+  dismissedAt?: ISODateString;
   readAt?: ISODateString;
   deletedAt?: ISODateString;
 }

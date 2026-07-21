@@ -24,11 +24,13 @@ export async function discoverNativeApplications(): Promise<InstalledApplication
     join(homedir(), "Applications"),
   ];
   const bundlePaths = new Set<string>();
-  await Promise.all(roots.map(async (root) => {
-    for (const bundlePath of await findApplicationBundles(root, 3)) {
-      bundlePaths.add(bundlePath);
-    }
-  }));
+  await Promise.all(
+    roots.map(async (root) => {
+      for (const bundlePath of await findApplicationBundles(root, 3)) {
+        bundlePaths.add(bundlePath);
+      }
+    }),
+  );
 
   const applications = await Promise.all([...bundlePaths].map(createMacApplication));
   return applications
@@ -53,15 +55,17 @@ async function findApplicationBundles(root: string, maxDepth: number): Promise<s
       return;
     }
 
-    await Promise.all(entries.map(async (entry) => {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) return;
-      const path = join(directory, entry.name);
-      if (entry.name.endsWith(".app")) {
-        results.push(path);
-        return;
-      }
-      await walk(path, depth - 1);
-    }));
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) return;
+        const path = join(directory, entry.name);
+        if (entry.name.endsWith(".app")) {
+          results.push(path);
+          return;
+        }
+        await walk(path, depth - 1);
+      }),
+    );
   }
 
   await walk(root, maxDepth);
@@ -115,7 +119,10 @@ async function createMacApplication(bundlePath: string): Promise<InstalledApplic
   };
 }
 
-export async function launchApplication(application: InstalledApplication | undefined, args: string[] = []): Promise<void> {
+export async function launchApplication(
+  application: InstalledApplication | undefined,
+  args: string[] = [],
+): Promise<void> {
   if (!application) return;
   if (platform === "darwin" && application.metadata.bundleIdentifier) {
     await spawnAndWait("open", ["-b", application.metadata.bundleIdentifier, ...args]);
@@ -128,9 +135,13 @@ export async function launchApplication(application: InstalledApplication | unde
 
 async function readInfoPlist(bundlePath: string): Promise<Record<string, unknown> | undefined> {
   try {
-    const { stdout } = await execFileAsync("plutil", ["-convert", "json", "-o", "-", join(bundlePath, "Contents", "Info.plist")], {
-      maxBuffer: 1024 * 1024,
-    });
+    const { stdout } = await execFileAsync(
+      "plutil",
+      ["-convert", "json", "-o", "-", join(bundlePath, "Contents", "Info.plist")],
+      {
+        maxBuffer: 1024 * 1024,
+      },
+    );
     return JSON.parse(stdout) as Record<string, unknown>;
   } catch {
     return undefined;
@@ -168,10 +179,16 @@ function readString(value: unknown): string | undefined {
 }
 
 function createApplicationId(bundleIdentifier: string): string {
-  return `app-${bundleIdentifier.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  return `app-${bundleIdentifier
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}`;
 }
 
-function inferApplicationCategory(name: string, bundleIdentifier: string): InstalledApplication["metadata"]["category"] {
+function inferApplicationCategory(
+  name: string,
+  bundleIdentifier: string,
+): InstalledApplication["metadata"]["category"] {
   const haystack = `${name} ${bundleIdentifier}`.toLocaleLowerCase();
   if (/(safari|chrome|firefox|arc|browser|edge|brave)/.test(haystack)) return "browser";
   if (/(code|cursor|xcode|terminal|iterm|docker|postman|github|sublime|zed)/.test(haystack)) return "development";
@@ -201,7 +218,8 @@ function inferApplicationCapabilities(name: string, category: InstalledApplicati
 
 function inferSupportedFileTypes(name: string, bundleIdentifier: string): string[] {
   const haystack = `${name} ${bundleIdentifier}`.toLocaleLowerCase();
-  if (/(code|cursor|sublime|zed)/.test(haystack)) return ["txt", "md", "markdown", "js", "ts", "tsx", "jsx", "json", "java", "py", "css", "html", "yml", "yaml"];
+  if (/(code|cursor|sublime|zed)/.test(haystack))
+    return ["txt", "md", "markdown", "js", "ts", "tsx", "jsx", "json", "java", "py", "css", "html", "yml", "yaml"];
   if (/(terminal|iterm)/.test(haystack)) return ["sh", "zsh", "bash"];
   if (/(safari|chrome|firefox|arc|edge|brave)/.test(haystack)) return ["html", "htm", "pdf", "url"];
   if (/(notes|notion|obsidian)/.test(haystack)) return ["txt", "md", "markdown"];

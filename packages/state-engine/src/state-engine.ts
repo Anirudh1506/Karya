@@ -1,6 +1,19 @@
 import type { EventBus } from "@karya/event-bus";
-import type { CalendarEvent, ContinuitySession, ContinuityWorkspaceSession, EntityId, InstalledApplication, KaryaActivity, KaryaNotification, Profile, Resource, SearchResult, Workspace, WorkspaceActivity } from "@karya/types";
-import { cloneSnapshot, freezeSnapshot } from "./immutability";
+import type {
+  CalendarEvent,
+  ContinuitySession,
+  ContinuityWorkspaceSession,
+  EntityId,
+  InstalledApplication,
+  KaryaActivity,
+  KaryaNotification,
+  Profile,
+  Resource,
+  SearchResult,
+  Workspace,
+  WorkspaceActivity,
+} from "@karya/types";
+import { freezeSnapshot } from "./immutability";
 import {
   collectResourcesByWorkspace,
   countResourcesByWorkspace,
@@ -19,8 +32,12 @@ import {
   upsertById,
 } from "./selectors";
 import type { KernelSnapshot, StateEngine, StateEngineHydration } from "./types";
-import { createFolderParentBreadcrumbs, deriveContinuityState, displayWorkspaceName, restoreShellFromSession } from "./derivations/continuity";
-
+import {
+  createFolderParentBreadcrumbs,
+  deriveContinuityState,
+  displayWorkspaceName,
+  restoreShellFromSession,
+} from "./derivations/continuity";
 
 export class KaryaStateEngine implements StateEngine {
   private snapshot: KernelSnapshot = freezeSnapshot(createEmptySnapshot());
@@ -29,16 +46,26 @@ export class KaryaStateEngine implements StateEngine {
   constructor(private readonly eventBus: EventBus) {}
 
   hydrate(input: StateEngineHydration): void {
-    const activeProfile = input.profiles.find((profile) => profile.id === input.session.activeProfileId) ?? input.profiles[0];
-    const visibleWorkspaces = input.workspaces.filter((workspace) => workspace.lifecycleState !== "deleted");
-    const activeWorkspace = visibleWorkspaces.find((workspace) => workspace.id === input.session.activeWorkspaceId)
-      ?? visibleWorkspaces.find((workspace) => workspace.lifecycleState === "open")
-      ?? visibleWorkspaces[0];
-    const selectedId = activeWorkspace
+    const activeProfile =
+      input.profiles.find((profile) => profile.id === input.session.activeProfileId) ?? input.profiles[0];
+    const visibleWorkspaces = input.workspaces.filter(
+      (workspace) => workspace.lifecycleState !== "deleted" && workspace.profileId === activeProfile?.id,
+    );
+    const activeWorkspace =
+      visibleWorkspaces.find((workspace) => workspace.id === input.session.activeWorkspaceId) ??
+      visibleWorkspaces.find((workspace) => workspace.lifecycleState === "open") ??
+      visibleWorkspaces[0];
+    const workspaceResources = activeWorkspace
+      ? input.resources.filter(
+          (resource) => resource.workspaceRefs.includes(activeWorkspace.id) && resource.lifecycleState !== "deleted",
+        )
+      : [];
+    const persistedSelectedId = activeWorkspace
       ? input.session.workspaceSessions?.[activeWorkspace.id]?.lastSelectedResourceId
-        ?? input.session.recentResourceIds[0]
-        ?? input.resources[0]?.id
-      : input.session.recentResourceIds[0] ?? input.resources[0]?.id;
+      : undefined;
+    const selectedId = workspaceResources.some((resource) => resource.id === persistedSelectedId)
+      ? persistedSelectedId
+      : workspaceResources[0]?.id;
     const openWorkspaces = activeWorkspace ? [activeWorkspace] : [];
     const settingsById = Object.fromEntries(input.settings.map((setting) => [setting.id, setting]));
 
@@ -48,7 +75,9 @@ export class KaryaStateEngine implements StateEngine {
       workspaces: {
         ...deriveWorkspaces(input.workspaces, activeWorkspace?.id),
         active: activeWorkspace,
-        open: deriveWorkspaces(input.workspaces, activeWorkspace?.id).open.length ? deriveWorkspaces(input.workspaces, activeWorkspace?.id).open : openWorkspaces,
+        open: deriveWorkspaces(input.workspaces, activeWorkspace?.id).open.length
+          ? deriveWorkspaces(input.workspaces, activeWorkspace?.id).open
+          : openWorkspaces,
         resourceCountByWorkspace: countResourcesByWorkspace(input.resources),
         resourceIdsByWorkspace: collectResourcesByWorkspace(input.resources),
       },
@@ -202,11 +231,23 @@ export class KaryaStateEngine implements StateEngine {
       this.eventBus.subscribe("WorkspaceApplicationUnpreferred", ({ workspace }) => {
         this.applyWorkspaceUpdated(workspace);
       }),
+      this.eventBus.subscribe("WorkspaceLaunchSetUpdated", ({ workspace }) => {
+        this.applyWorkspaceUpdated(workspace);
+      }),
+      this.eventBus.subscribe("WorkspaceSettingsUpdated", ({ workspace }) => {
+        this.applyWorkspaceUpdated(workspace);
+      }),
       this.eventBus.subscribe("SessionRestored", ({ session }) => {
         this.applySessionRestored(session);
       }),
       this.eventBus.subscribe("continuity:session-updated", ({ session }) => {
         this.applySessionUpdated(session);
+      }),
+      this.eventBus.subscribe("ContinueWorkingUpdated", ({ items }) => {
+        this.commit({
+          ...this.snapshot,
+          continuity: { ...this.snapshot.continuity, continueWorking: items },
+        });
       }),
       this.eventBus.subscribe("profile:changed", ({ profileId }) => {
         this.applyProfileChanged(profileId);
@@ -301,7 +342,11 @@ export class KaryaStateEngine implements StateEngine {
   selectResource(resourceId?: EntityId): void {
     this.commit({
       ...this.snapshot,
-      resources: deriveResources(this.snapshot.resources.all, resourceId, this.snapshot.resources.recent.map((resource) => resource.id)),
+      resources: deriveResources(
+        this.snapshot.resources.all,
+        resourceId,
+        this.snapshot.resources.recent.map((resource) => resource.id),
+      ),
     });
   }
 
@@ -314,8 +359,17 @@ export class KaryaStateEngine implements StateEngine {
 
     this.commit({
       ...this.snapshot,
-      resources: deriveResources(resources, isFolderChild ? this.snapshot.resources.selectedId : resource.id, recentIds),
-      profiles: deriveProfiles(this.snapshot.profiles.all, resources, this.snapshot.workspaces.all, this.snapshot.profiles.active?.id),
+      resources: deriveResources(
+        resources,
+        isFolderChild ? this.snapshot.resources.selectedId : resource.id,
+        recentIds,
+      ),
+      profiles: deriveProfiles(
+        this.snapshot.profiles.all,
+        resources,
+        this.snapshot.workspaces.all,
+        this.snapshot.profiles.active?.id,
+      ),
       workspaces: {
         ...this.snapshot.workspaces,
         resourceCountByWorkspace: countResourcesByWorkspace(resources),
@@ -323,7 +377,9 @@ export class KaryaStateEngine implements StateEngine {
       },
       search: {
         ...this.snapshot.search,
-        results: this.snapshot.search.query ? searchResources(resources, this.snapshot.search.query) : this.snapshot.search.results,
+        results: this.snapshot.search.query
+          ? searchResources(resources, this.snapshot.search.query)
+          : this.snapshot.search.results,
         suggestions: deriveSearchSuggestions(resources, this.snapshot.applications.installed),
       },
     });
@@ -331,15 +387,26 @@ export class KaryaStateEngine implements StateEngine {
 
   private applyResourceUpdated(resource: Resource): void {
     const resources = upsertById(this.snapshot.resources.all, resource);
+    const activeWorkspaceId = this.snapshot.workspaces.active?.id;
+    const selectedResource = resources.find((candidate) => candidate.id === this.snapshot.resources.selectedId);
+    const selectedId =
+      activeWorkspaceId && selectedResource?.workspaceRefs.includes(activeWorkspaceId)
+        ? selectedResource.id
+        : undefined;
 
     this.commit({
       ...this.snapshot,
       resources: deriveResources(
         resources,
-        this.snapshot.resources.selectedId,
+        selectedId,
         this.snapshot.resources.recent.map((recent) => recent.id),
       ),
-      profiles: deriveProfiles(this.snapshot.profiles.all, resources, this.snapshot.workspaces.all, this.snapshot.profiles.active?.id),
+      profiles: deriveProfiles(
+        this.snapshot.profiles.all,
+        resources,
+        this.snapshot.workspaces.all,
+        this.snapshot.profiles.active?.id,
+      ),
       workspaces: {
         ...this.snapshot.workspaces,
         resourceCountByWorkspace: countResourcesByWorkspace(resources),
@@ -377,7 +444,8 @@ export class KaryaStateEngine implements StateEngine {
 
   private applyResourceDeleted(resourceId: EntityId): void {
     const resources = this.snapshot.resources.all.filter((resource) => resource.id !== resourceId);
-    const selectedId = this.snapshot.resources.selectedId === resourceId ? resources[0]?.id : this.snapshot.resources.selectedId;
+    const selectedId =
+      this.snapshot.resources.selectedId === resourceId ? resources[0]?.id : this.snapshot.resources.selectedId;
 
     this.commit({
       ...this.snapshot,
@@ -386,7 +454,12 @@ export class KaryaStateEngine implements StateEngine {
         selectedId,
         this.snapshot.resources.recent.map((recent) => recent.id).filter((id) => id !== resourceId),
       ),
-      profiles: deriveProfiles(this.snapshot.profiles.all, resources, this.snapshot.workspaces.all, this.snapshot.profiles.active?.id),
+      profiles: deriveProfiles(
+        this.snapshot.profiles.all,
+        resources,
+        this.snapshot.workspaces.all,
+        this.snapshot.profiles.active?.id,
+      ),
       workspaces: {
         ...this.snapshot.workspaces,
         resourceCountByWorkspace: countResourcesByWorkspace(resources),
@@ -397,11 +470,17 @@ export class KaryaStateEngine implements StateEngine {
 
   private applyWorkspaceUpdated(workspace: Workspace, activeWorkspaceId = this.snapshot.workspaces.active?.id): void {
     const workspaces = upsertById(this.snapshot.workspaces.all, workspace);
-    const nextActiveId = workspace.lifecycleState === "open" ? activeWorkspaceId : activeWorkspaceId === workspace.id ? undefined : activeWorkspaceId;
+    const nextActiveId =
+      workspace.lifecycleState === "open"
+        ? activeWorkspaceId
+        : activeWorkspaceId === workspace.id
+          ? undefined
+          : activeWorkspaceId;
 
-    const activeProfileId = workspace.lifecycleState === "open" && activeWorkspaceId === workspace.id
-      ? workspace.profileId
-      : this.snapshot.profiles.active?.id;
+    const activeProfileId =
+      workspace.lifecycleState === "open" && activeWorkspaceId === workspace.id
+        ? workspace.profileId
+        : this.snapshot.profiles.active?.id;
 
     const nextSnapshot: KernelSnapshot = {
       ...this.snapshot,
@@ -419,7 +498,11 @@ export class KaryaStateEngine implements StateEngine {
       ),
       search: {
         ...this.snapshot.search,
-        suggestions: deriveSearchSuggestions(this.snapshot.resources.all, this.snapshot.applications.installed, workspaces),
+        suggestions: deriveSearchSuggestions(
+          this.snapshot.resources.all,
+          this.snapshot.applications.installed,
+          workspaces,
+        ),
       },
     };
 
@@ -442,11 +525,26 @@ export class KaryaStateEngine implements StateEngine {
   }
 
   private applySessionUpdated(session: ContinuitySession): void {
-    const activeWorkspace = this.snapshot.workspaces.all.find((workspace) => workspace.id === session.activeWorkspaceId);
+    const activeWorkspace = this.snapshot.workspaces.all.find(
+      (workspace) => workspace.id === session.activeWorkspaceId,
+    );
     const activeProfile = this.snapshot.profiles.all.find((profile) => profile.id === session.activeProfileId);
-    const restoredShell = this.snapshot.shell.activeSurface.type === "profile"
-      ? undefined
-      : restoreShellFromSession(this.snapshot, session);
+    const restoredShell =
+      this.snapshot.shell.activeSurface.type === "profile"
+        ? undefined
+        : restoreShellFromSession(this.snapshot, session);
+
+    const workspaceResources = activeWorkspace
+      ? this.snapshot.resources.all.filter(
+          (resource) => resource.workspaceRefs.includes(activeWorkspace.id) && resource.lifecycleState !== "deleted",
+        )
+      : [];
+    const persistedSelectedId = activeWorkspace
+      ? session.workspaceSessions?.[activeWorkspace.id]?.lastSelectedResourceId
+      : undefined;
+    const selectedResourceId = workspaceResources.some((resource) => resource.id === persistedSelectedId)
+      ? persistedSelectedId
+      : undefined;
 
     this.commit({
       ...this.snapshot,
@@ -461,13 +559,7 @@ export class KaryaStateEngine implements StateEngine {
         resourceCountByWorkspace: this.snapshot.workspaces.resourceCountByWorkspace,
         resourceIdsByWorkspace: this.snapshot.workspaces.resourceIdsByWorkspace,
       },
-      resources: deriveResources(
-        this.snapshot.resources.all,
-        session.activeWorkspaceId
-          ? session.workspaceSessions?.[session.activeWorkspaceId]?.lastSelectedResourceId ?? this.snapshot.resources.selectedId
-          : this.snapshot.resources.selectedId,
-        session.recentResourceIds,
-      ),
+      resources: deriveResources(this.snapshot.resources.all, selectedResourceId, session.recentResourceIds),
       applications: deriveApplications(
         this.snapshot.applications.installed,
         this.snapshot.applications.running,
@@ -476,6 +568,7 @@ export class KaryaStateEngine implements StateEngine {
       ),
       continuity: {
         ...deriveContinuityState(session, this.snapshot.workspaces.all),
+        continueWorking: this.snapshot.continuity.continueWorking,
         recentSessions: upsertById(this.snapshot.continuity.recentSessions, session),
       },
       shell: restoredShell ?? {
@@ -497,34 +590,51 @@ export class KaryaStateEngine implements StateEngine {
 
     this.commit({
       ...this.snapshot,
-      profiles: deriveProfiles(this.snapshot.profiles.all, this.snapshot.resources.all, this.snapshot.workspaces.all, profile.id),
+      profiles: deriveProfiles(
+        this.snapshot.profiles.all,
+        this.snapshot.resources.all,
+        this.snapshot.workspaces.all,
+        profile.id,
+      ),
     });
   }
 
   private applyProfileUpdated(profile: Profile): void {
-    const profiles = profile.lifecycleState === "deleted"
-      ? this.snapshot.profiles.all.filter((item) => item.id !== profile.id)
-      : upsertById(this.snapshot.profiles.all, profile);
-    const activeProfileId = profile.lifecycleState === "active" && profile.id === this.snapshot.profiles.active?.id ? profile.id : this.snapshot.profiles.active?.id;
+    const profiles =
+      profile.lifecycleState === "deleted"
+        ? this.snapshot.profiles.all.filter((item) => item.id !== profile.id)
+        : upsertById(this.snapshot.profiles.all, profile);
+    const activeProfileId =
+      profile.lifecycleState === "active" && profile.id === this.snapshot.profiles.active?.id
+        ? profile.id
+        : this.snapshot.profiles.active?.id;
     const nextSnapshot: KernelSnapshot = {
       ...this.snapshot,
       profiles: deriveProfiles(profiles, this.snapshot.resources.all, this.snapshot.workspaces.all, activeProfileId),
       search: {
         ...this.snapshot.search,
-        suggestions: deriveSearchSuggestions(this.snapshot.resources.all, this.snapshot.applications.installed, this.snapshot.workspaces.all),
+        suggestions: deriveSearchSuggestions(
+          this.snapshot.resources.all,
+          this.snapshot.applications.installed,
+          this.snapshot.workspaces.all,
+        ),
       },
     };
 
-    if (this.snapshot.shell.activeSurface.type === "profile" && this.snapshot.shell.activeSurface.profileId === profile.id) {
+    if (
+      this.snapshot.shell.activeSurface.type === "profile" &&
+      this.snapshot.shell.activeSurface.profileId === profile.id
+    ) {
       nextSnapshot.shell = {
         ...nextSnapshot.shell,
         activeSurface: profile.lifecycleState === "deleted" ? { type: "home" } : this.snapshot.shell.activeSurface,
-        breadcrumbs: profile.lifecycleState === "deleted"
-          ? [{ id: "surface:home", label: "Home" }]
-          : [
-              { id: "surface:home", label: "Home" },
-              { id: `profile:${profile.id}`, label: profile.name },
-            ],
+        breadcrumbs:
+          profile.lifecycleState === "deleted"
+            ? [{ id: "surface:home", label: "Home" }]
+            : [
+                { id: "surface:home", label: "Home" },
+                { id: `profile:${profile.id}`, label: profile.name },
+              ],
       };
     }
 
@@ -551,7 +661,12 @@ export class KaryaStateEngine implements StateEngine {
     const profiles = upsertById(this.snapshot.profiles.all, profile);
     this.commit({
       ...this.snapshot,
-      profiles: deriveProfiles(profiles, this.snapshot.resources.all, this.snapshot.workspaces.all, this.snapshot.profiles.active?.id),
+      profiles: deriveProfiles(
+        profiles,
+        this.snapshot.resources.all,
+        this.snapshot.workspaces.all,
+        this.snapshot.profiles.active?.id,
+      ),
       shell: {
         ...this.snapshot.shell,
         activeSurface: { type: "profile", profileId: profile.id },
@@ -589,7 +704,11 @@ export class KaryaStateEngine implements StateEngine {
       ),
       search: {
         ...this.snapshot.search,
-        suggestions: deriveSearchSuggestions(this.snapshot.resources.all, upsertApplication(this.snapshot.applications.installed, application), this.snapshot.workspaces.all),
+        suggestions: deriveSearchSuggestions(
+          this.snapshot.resources.all,
+          upsertApplication(this.snapshot.applications.installed, application),
+          this.snapshot.workspaces.all,
+        ),
       },
     });
   }
@@ -598,7 +717,12 @@ export class KaryaStateEngine implements StateEngine {
     const applications = upsertApplication(this.snapshot.applications.installed, application);
     this.commit({
       ...this.snapshot,
-      applications: deriveApplications(applications, this.snapshot.applications.running, this.snapshot.workspaces.all, this.snapshot.continuity.currentSession),
+      applications: deriveApplications(
+        applications,
+        this.snapshot.applications.running,
+        this.snapshot.workspaces.all,
+        this.snapshot.continuity.currentSession,
+      ),
       search: {
         ...this.snapshot.search,
         suggestions: deriveSearchSuggestions(this.snapshot.resources.all, applications, this.snapshot.workspaces.all),
@@ -626,7 +750,8 @@ export class KaryaStateEngine implements StateEngine {
   private openFolderSurface(folder: Resource, containingWorkspace?: Workspace): void {
     const resources = upsertById(this.snapshot.resources.all, folder);
     const workspaceId = containingWorkspace?.id ?? folder.primaryWorkspaceId ?? folder.workspaceRefs[0];
-    const workspace = containingWorkspace ?? this.snapshot.workspaces.all.find((candidate) => candidate.id === workspaceId);
+    const workspace =
+      containingWorkspace ?? this.snapshot.workspaces.all.find((candidate) => candidate.id === workspaceId);
     const profile = workspace
       ? this.snapshot.profiles.all.find((candidate) => candidate.id === workspace.profileId)
       : undefined;
@@ -635,7 +760,11 @@ export class KaryaStateEngine implements StateEngine {
       : [{ id: "surface:home", label: "Home" }];
     this.commit({
       ...this.snapshot,
-      resources: deriveResources(resources, folder.id, this.snapshot.resources.recent.map((recent) => recent.id)),
+      resources: deriveResources(
+        resources,
+        folder.id,
+        this.snapshot.resources.recent.map((recent) => recent.id),
+      ),
       shell: {
         ...this.snapshot.shell,
         activeSurface: { type: "folder", resourceId: folder.id },
@@ -659,12 +788,8 @@ export class KaryaStateEngine implements StateEngine {
   }
 
   private commit(nextSnapshot: KernelSnapshot): void {
-    const immutable = freezeSnapshot(cloneSnapshot(nextSnapshot));
-    if (JSON.stringify(immutable) === JSON.stringify(this.snapshot)) {
-      return;
-    }
-
-    this.snapshot = immutable;
+    if (nextSnapshot === this.snapshot) return;
+    this.snapshot = freezeSnapshot(nextSnapshot);
     this.listeners.forEach((listener) => listener(this.snapshot));
   }
 }
