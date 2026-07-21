@@ -29,6 +29,7 @@ npmRebuild: false
 buildDependenciesFromSource: false
 compression: normal
 removePackageScripts: true
+afterPack: scripts/clear-macos-signing-detritus.cjs
 
 mac:
   category: public.app-category.productivity
@@ -37,6 +38,7 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
   target:
     - target: dir
     - target: zip
@@ -45,6 +47,9 @@ win:
   icon: build/icon.ico
   publisherName: Karya
   target:
+    - target: zip
+      arch:
+        - x64
     - target: nsis
       arch:
         - x64

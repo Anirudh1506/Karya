@@ -88,3 +88,4 @@ Current state:
 - Notarization credentials are not configured.
 
 Before public distribution, configure Apple Developer signing and notarization.
+See [macOS Signing and Notarization](MacOSSigningNotarization.md) for the release checklist.

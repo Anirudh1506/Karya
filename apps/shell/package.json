@@ -20,6 +20,9 @@
     "start:production": "env -u ELECTRON_RUN_AS_NODE NODE_ENV=production electron .",
     "pack": "pnpm run prepare:production && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
     "dist": "pnpm run prepare:production && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "dist:mac": "pnpm run prepare:production && node ./scripts/prepare-macos-signing.cjs && electron-builder --mac",
+    "dist:win": "pnpm run prepare:production && electron-builder --win --x64",
+    "dist:linux": "pnpm run prepare:production && electron-builder --linux --x64",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit"
   },
