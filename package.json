@@ -5,19 +5,46 @@
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "ELECTRON_RUN_AS_NODE= turbo dev --filter=@karya/shell",
+    "dev:desktop": "ELECTRON_RUN_AS_NODE= turbo dev --filter=@karya/shell",
+    "dev:mobile": "pnpm --filter @karya/mobile start",
+    "mobile:start:fresh": "node scripts/mobile.mjs start",
+    "mobile:rebuild:ios": "node scripts/mobile.mjs rebuild ios",
+    "mobile:rebuild:android": "node scripts/mobile.mjs rebuild android",
     "build": "turbo build",
+    "build:desktop": "turbo build --filter=@karya/shell",
+    "build:mobile": "pnpm --filter @karya/mobile build",
     "build:development": "turbo build --filter=@karya/shell",
     "build:production": "turbo build --filter=@karya/shell",
     "dist": "turbo dist --filter=@karya/shell",
+    "dist:mac": "turbo build --filter=@karya/shell && pnpm --filter @karya/shell run dist:mac",
+    "dist:win": "turbo build --filter=@karya/shell && pnpm --filter @karya/shell run dist:win",
+    "dist:linux": "turbo build --filter=@karya/shell && pnpm --filter @karya/shell run dist:linux",
     "pack": "turbo pack --filter=@karya/shell",
     "typecheck": "turbo typecheck",
-    "lint": "turbo lint"
+    "lint": "eslint apps packages --max-warnings=0",
+    "format": "prettier --write .",
+    "format:staged": "node scripts/format-staged.mjs",
+    "format:check": "prettier --check .",
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "test": "turbo test",
+    "test:ksp": "pnpm --filter @karya/ksp-conformance test",
+    "test:ksp:conformance": "pnpm --filter @karya/ksp-conformance test:conformance",
+    "test:ksp:scale": "pnpm --filter @karya/ksp-conformance test:scale",
+    "test:alpha": "pnpm --filter @karya/kernel exec vitest run src/alpha-product-certification.test.ts",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@karya/tooling": "workspace:*",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "@types/node": "^22.10.7",
+    "eslint": "^9.32.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
     "turbo": "^2.3.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.38.0"
   }
 }
