@@ -7,16 +7,20 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@karya/account-service": "workspace:*",
     "@karya/application-registry": "workspace:*",
     "@karya/activity-service": "workspace:*",
+    "@karya/capture-service": "workspace:*",
     "@karya/command-registry": "workspace:*",
     "@karya/content-store": "workspace:*",
     "@karya/continuity-service": "workspace:*",
     "@karya/event-service": "workspace:*",
     "@karya/event-bus": "workspace:*",
+    "@karya/editing-service": "workspace:*",
     "@karya/import-service": "workspace:*",
     "@karya/notification-service": "workspace:*",
     "@karya/platform": "workspace:*",
+    "@karya/persistence": "workspace:*",
     "@karya/profile-service": "workspace:*",
     "@karya/query-service": "workspace:*",
     "@karya/relationship-service": "workspace:*",
@@ -24,12 +28,18 @@
     "@karya/search-service": "workspace:*",
     "@karya/settings-service": "workspace:*",
     "@karya/state-engine": "workspace:*",
+    "@karya/sync-service": "workspace:*",
+    "@karya/transport-service": "workspace:*",
     "@karya/types": "workspace:*",
     "@karya/workspace-service": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   }
 }

@@ -7,6 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@karya/account-service": "workspace:*",
+    "@karya/capture-service": "workspace:*",
     "@karya/domain": "workspace:*",
     "@karya/import-service": "workspace:*",
     "@karya/kernel": "workspace:*",

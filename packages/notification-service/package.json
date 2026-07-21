@@ -7,8 +7,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@karya/activity-service": "workspace:*",
     "@karya/event-bus": "workspace:*",
-    "@karya/platform": "workspace:*",
+    "@karya/persistence": "workspace:*",
     "@karya/types": "workspace:*"
   },
   "scripts": {
