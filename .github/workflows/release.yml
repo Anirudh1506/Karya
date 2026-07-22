@@ -12,6 +12,7 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -37,8 +38,11 @@ jobs:
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > "$RUNNER_TEMP/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8"
 
       - name: Build, sign, and notarize
+        timeout-minutes: 20
         run: pnpm run dist:mac
         env:
+          DEBUG: electron-builder,electron-osx-sign*
+          TURBO_TELEMETRY_DISABLED: 1
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_API_KEY: ${{ runner.temp }}/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
